@@ -1,0 +1,200 @@
+---
+title: "Drop-seq alignment report"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+params:
+  rmd: "align_report.Rmd"
+output:
+  html_document:
+    number_sections: yes
+    toc: yes
+---
+
+<br>
+
+```{r setup, include=FALSE}
+# set global chunk options
+knitr::opts_chunk$set(echo = FALSE)
+
+# load required functions and packages
+library(here)
+source(here("scripts/align_report_fun.R"))
+```
+
+This report shows summary statistics produced by the Drop-seq alignment pipeline for sample
+**`r snakemake@wildcards$sample`**.
+
+# Cell and molecular barcodes
+These tables shows the total number of detected cell and molecular (UMI) barcodes and how many
+barcodes had at least 1 failed base. For full summary data see <tt>`r snakemake@input$cell_bcs`</tt>
+and <tt>`r snakemake@input$mol_bcs`</tt> files. Any reads with barcodes that have any failed bases
+were excluded from subsequent steps.
+```{r bc_summary}
+# calculate summary statistics
+bc_stats <- bc_summary(here(snakemake@input$cell_bcs), here(snakemake@input$mol_bcs))
+
+# print table
+knitr::kable(bc_stats)
+```
+
+***
+
+# Read trimming
+Sequenced reads might still contain parts of SMART adapters (5') and polyA tails (3'). The Drop-seq
+pipeline therefore scans reads and trims any remaining adapter or polyA tail sequences prior to
+mapping. These plots show the number of clipped bases or read lengths after clipping for all trimmed
+reads. For full summary data see <tt>`r snakemake@input$adapt_trim`</tt> and
+<tt>`r snakemake@input$polyA_trim`</tt> files.
+
+<br>
+
+```{r adaptor_trimming}
+# extract total number of reads from STAR log output
+input_reads  <- readLines(here(snakemake@input$star_smry), n = 6)[6]
+total_reads <- as.numeric(unlist(strsplit(input_reads, split = "\t"))[2])
+
+# plot adapter trimming summary
+adapter_trim_hist(adapter_trim_file = here(snakemake@input$adapt_trim),
+                  sample = snakemake@wildcards$sample,
+                  total_reads = total_reads)
+```
+
+<br>
+
+```{r polyA_trimming}
+# plot polyA trimming summary
+polyA_trim_hist(polyA_trim_file = here(snakemake@input$polyA_trim),
+                  sample = snakemake@wildcards$sample,
+                  total_reads = total_reads)
+```
+
+***
+
+# Read alignment
+Reads were aligned to the provided reference genome using STAR. The following plots show a summary
+of the mapping results. For full summary see the <tt> `r snakemake@input$star_smry` </tt> file.
+
+<br>
+
+```{r mapping_stats}
+# extract percentage of reads across mapping cats
+perc_reads <- get_mapping_cats(here(snakemake@input$star_smry))
+
+# plot percentage of reads
+plot_mapping_cats(mapping_cats = perc_reads, sample = snakemake@wildcards$sample,
+                  total_reads = total_reads)
+```
+
+***
+
+# Barcode synthesis errors
+DetectBeadSynthesisErrors from Drop-seq tools scans barcodes for synthesis errors and tries to
+correct incomplete cell barcodes or discards them if this is not possible. For details on the method
+refer to the
+[Drop-seq Alignment Cookbook](http://mccarrolllab.org/wp-content/uploads/2016/03/Drop-seqAlignmentCookbookv1.2Jan2016.pdf).
+
+<br>
+
+**Summary of detected error types**
+```{r synt_error_stats}
+# read synthesis error summary data
+synt_error_summary <- read_synthesis_error(here(snakemake@input$synthesis_error))
+
+# transpose metrics data.frame for better layout in html output
+metrics <- t(synt_error_summary$metrics)
+
+# add ":" to rownames
+rownames(metrics) <- paste0(rownames(metrics), ":")
+
+# print metrics summary table in list format
+knitr::kable(metrics, col.names = "")
+```
+
+<br>
+<br>
+
+**Synthesis error**
+The most common detected errors are cell barcodes that did not undergo 12 rounds of splitting and
+pooling, and are therefore shorter. This manifests itself by detected fixed Ts at the end of the UMI
+sequence (see Drop-seq Alignment Cookbook for more details). This histogram shows the number of
+cells with detected fixed Ts and the base positions where the errors are deteced.
+
+<br>
+
+```{r error_position}
+# extract barcode lengths from bc_structure parameter
+bc_len <- as.integer(sub(snakemake@params$bc_structure, pattern = ".+-", replacement = ""))
+bc_len[2] <- bc_len[2] - bc_len[1]
+
+# plot histogram of detected fixed Ts in UMIs
+synthesis_error_hist(synt_error_summary, sample = snakemake@wildcards$sample,
+                     cell_bc_length = bc_len[1], mol_bc_length = bc_len[2])
+```
+
+***
+
+# Number of cells
+A crucial step of processing droplet based single-cell data is to estimate the number of sequenced
+cells. Here an estimate of the number of cell is derived based on the number of sequenced reads per
+cell barcode. This assumes that a cell barcode associated with reads from a "true" cell has much
+more sequenced reads than barcode that only captured ambient RNA.
+
+## Reads per cell barcode
+The distribution of reads per cell barcode is computed for the top x cell barcodes, where x is the
+number of expected cells * 2. In case of a successful Drop-seq experiment this results in a bimodal
+distribution, which consists of the barcodes associated to true cells (higher reads per barcode) and
+the cell barcodes that bound ambient RNA (lower reads per barcode). The local minimum between these
+two distributions is estimated as a cutoff to choose the number of cells per experiment.
+
+<br>
+
+```{r reads_per_cell_barcode}
+# get sample id
+sample <- snakemake@wildcards$sample
+
+# extract expected cell number from snakemake object
+expect_cells <- as.numeric(snakemake@config$expect_cell_numbers[sample])
+
+# compute the reads per cell barcode distribution for the top x cells, where
+# x is the number of expected cells * 2 and compute local minimum in
+# bimodal distribution
+rpc_dens <- rpc_density(here(snakemake@input$reads_per_cell), expect_cells = expect_cells)
+
+# define plot title
+dens_title <- paste(sample, "reads per cell barcode (top", expect_cells * 2, "cells)")
+
+# create interactive plot
+plot_rpc_density(rpc_dens, title = dens_title)
+```
+
+This plot shows the distribution of reads per cell barcode. The vertical line shows the local
+minimum between the peaks of the bimodal distribution, if this could be inferred.
+
+<br>
+
+## Cumulative fraction of reads per cell barcode
+The cumulative distribution of reads per cell barcode is created to assess the number cells in each
+experiment. The number of reads per cell barcode is calculated and barcodes are sorted by number of
+associated reads. Then the cumulative fraction of reads as a function of the number of cell barcodes
+is calculated and plotted. A vertical line is drawn at the estimated number of cells.
+
+```{r cumulative_fraction}
+# extract estimated number of cells
+ncells <- rpc_dens$ncells
+
+# calculate cumulative fraction
+rpc <- cumfrac_rpc(here(snakemake@input$reads_per_cell))
+
+# define plot title
+title <- paste0(sample, " cumulative reads (total reads: ", total_reads, ")")
+
+# plot cumulative fraction plot
+plot_cumfrac_rpc(rpc, nbcs = expect_cells * 10, title = title, ncells = ncells)
+```
+
+***
+
+# Source
+* <a download="align_report.Rmd" href="`r base64enc::dataURI(file = params$rmd, mime = 'text/rmd',
+    encoding = 'base64')`">R Markdown source file (to produce this document)</a>
+* [Drop-seq webpage (McCarroll Lab)](http://mccarrolllab.com/dropseq/)
+* [Drop-seq Alignment Cookbook (v1.2)](http://mccarrolllab.org/wp-content/uploads/2016/03/Drop-seqAlignmentCookbookv1.2Jan2016.pdf)

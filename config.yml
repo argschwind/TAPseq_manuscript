@@ -1,0 +1,104 @@
+## SAMPLES AND SAMPLE-SPECIFIC PARAMETERS ==========================================================
+
+# sample id: /path/to/fastq/directory
+samples:
+  Sample10X: /g/steinmetz/incoming/solexa/2018-11-22-H3372BGX9/lane1/LIB38089_RBA37572/fastq
+  11iv210ng: /g/steinmetz/incoming/solexa/2018-11-22-H3372BGX9/lane1/LIB38090_RBA37573/fastq
+  11iv22ng:  /g/steinmetz/incoming/solexa/2018-11-22-H3372BGX9/lane1/LIB38091_RBA37574/fastq
+  8iv210ng:  /g/steinmetz/incoming/solexa/2018-11-22-H3372BGX9/lane1/LIB38087_RBA37570/fastq
+  8iv22ng:   /g/steinmetz/incoming/solexa/2018-11-22-H3372BGX9/lane1/LIB38088_RBA37571/fastq
+
+# rough A PRIORI estimate of the number of sequenced cells per sample. this is only used during
+# alignment not dge extraction
+expect_cell_numbers:
+  Sample10X: 10000
+  11iv210ng: 8000
+  11iv22ng:  8000
+  8iv210ng:  8000
+  8iv22ng:   8000
+
+# number of cells for which dge data should be extracted. these can be arrays to extract dge for
+# multiple sets of cells per sample
+dge_ncells:
+  Sample10X: 8000
+  11iv210ng: 8500
+  11iv22ng:  8500
+  8iv210ng:  7500
+  8iv22ng:   7500
+  
+# cell and umi barcode base positions in barcode reads. The first element of the array is the cell
+# barcode range, while the second is the UMI barcode range.
+bc_structure: [1-16, 17-26]
+
+# alignment reference for each sample
+align_ref:
+  Sample10X: data/genome_reference
+  11iv210ng: data/tapseq_reference
+  11iv22ng:  data/tapseq_reference
+  8iv210ng:  data/tapseq_reference
+  8iv22ng:   data/tapseq_reference
+
+# sample ids for validation and screen TAP-seq runs
+validation: [11iv210ng, 11iv22ng, 8iv210ng, 8iv22ng, Sample10X]
+screen:     
+
+## PARAMETERS FOR INDIVIDUAL RULES =================================================================
+
+# step 1: create alignment reference ---------------------------------------------------------------
+download_genome_annot:
+  fasta_url: ftp://ftp.ensembl.org/pub/release-89/fasta/homo_sapiens/dna/Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz
+  gtf_url: ftp://ftp.ensembl.org/pub/release-89/gtf/homo_sapiens/Homo_sapiens.GRCh38.89.gtf.gz
+  
+create_tapseq_ref:
+  tapseq_genes: meta_data/k562_tapseq_target_genes.gtf
+  BSgenome_id: BSgenome.Hsapiens.UCSC.hg38
+  
+create_vector_ref:
+  vector_fasta: meta_data/cropseq_vectors_fasta
+  fasta_ext: ".fasta"
+  fasta_line: 80
+  
+create_genomedir:
+  star_threads: 5
+  sjdb_overhang: 57
+  
+# step 2: align reads ------------------------------------------------------------------------------
+tag_cell_barcodes:
+  base_quality: 10
+  num_bases_below_quality: 1
+
+tag_molecule_barcodes:
+  base_quality: 10
+  num_bases_below_quality: 1
+
+trim_starting_sequence:
+  adapter_sequence: AAGCAGTGGTATCAACGCAGAGTGAATGGG
+  mismatches: 0
+  num_bases: 5
+
+trim_polyA:
+  mismatches: 0
+  num_bases: 6
+
+star_align:
+  threads: 5
+
+bead_synthesis_error:
+  min_umis_per_cell: 25
+  max_num_errors: 1
+  read_mq: 10
+  primer_sequence: null
+  edit_distance: 0
+  
+reads_per_cell:
+  read_quality: 10
+  
+# step 3: extract dge data -------------------------------------------------------------------------
+umi_observations:
+  edit_distance: 1
+  read_mq: 10
+  min_umi_reads: 0
+  rare_umi_filter_threshold: 0.0
+  
+extract_dge:
+  tpt_threshold: 0.25

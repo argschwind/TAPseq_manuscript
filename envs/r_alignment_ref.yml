@@ -1,0 +1,15 @@
+name: r_alignment_ref
+channels:
+  - bioconda
+  - conda-forge
+  - defaults
+  - r
+dependencies:
+  - r-base=3.4.1
+  - r-optparse=1.6.0
+  - r-tidyverse=1.2.1
+  - bioconductor-rtracklayer=1.38.3
+  - bioconductor-genomicranges=1.30.3
+  - bioconductor-genomicfeatures=1.30.3
+  - bioconductor-bsgenome=1.46.0
+  - bioconductor-bsgenome.hsapiens.ucsc.hg38=1.4.1

@@ -1,0 +1,13 @@
+name: dropseq_tools
+channels:
+  - defaults
+  - bioconda
+  - conda-forge
+dependencies:
+  - wget=1.19.5
+  - python=3.6.6
+  - pandas=0.24.0
+  - numpy=1.16.0
+  - star=2.5.3a
+  - picard=2.18.14
+  - dropseq_tools=1.13

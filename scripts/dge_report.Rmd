@@ -1,0 +1,166 @@
+---
+title: "Drop-seq DGE report"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+params:
+  rmd: "dge_report.Rmd"
+output:
+  html_document:
+    number_sections: yes
+    toc: yes
+---
+
+<br>
+
+```{r setup, include=FALSE}
+# set global chunk options
+knitr::opts_chunk$set(echo = FALSE)
+
+# load required packages
+library(tidyverse)
+library(here)
+library(plotly)
+```
+
+This report summarizes the results from the Digital Gene Expression (DGE) extraction for sample
+**`r snakemake@wildcards$sample`**.
+
+# Chimeric reads filtering
+To assess chimeric reads a measurement called "Transcripts-per-transcript (TPT)" proposed by
+[Dixit et al.](https://www.biorxiv.org/content/early/2016/12/12/093237.full.pdf) was computed
+during DGE extraction. Chimeric read events can introduce barcode switches, leading to reads of a
+particular transcript being paired with the cell and UMI barcodes of another transcript. TPT
+calculates the fraction of all reads for a given cell-UMI barcode combination map to each gene
+associated with that combination. Real transcripts are expected to have a high TPT value, because
+chimeric read events are assumed to be rare and therefore most reads will map to the true gene.
+Transcripts with a very low TPT on the other hand are more likely to come from chimeric reads
+events.
+
+<br>
+
+```{r tpt_histogram}
+# read tpt histogram data
+tpt_hist <- read.table(here(snakemake@input$tpt_hist), header = TRUE, stringsAsFactors = FALSE)
+
+# bin tpt values into better intervals for plotting
+bins <- seq(0, 1, by = 0.1)
+tpt_hist_plot <- tpt_hist %>%
+  mutate(tpt_bin = cut(tpt, bins)) %>%
+  group_by(tpt_bin) %>%
+  summarize(transcripts = sum(transcripts))
+
+# plot histogram
+ggplot(tpt_hist_plot, aes(x = tpt_bin, y = transcripts)) +
+  geom_bar(stat = "identity") +
+  labs(x = "Transcripts-per-transcripts", y = "Transcripts", title = "TPT distribution") +
+  theme_bw()
+```
+
+Transcripts with a TPT value below `r snakemake@config$extract_dge$tpt_threshold` were considered
+to be the result of chimeric read events and were filtered out during DGE extraction.
+
+***
+
+# DGE data
+```{r dge_summary_stats}
+# read dge summary statistics
+dge_stats <- read.table(here(snakemake@input$dge_stats), header = TRUE, stringsAsFactors = FALSE)
+
+
+# sort dge_stats according to number of detected transcripts and transform cell barcode into factor
+dge_stats <- arrange(dge_stats, desc(transcripts)) %>%
+  mutate(cell_barcode = forcats::fct_inorder(cell_barcode))
+```
+
+## Summary stats
+These plots show the number of genic reads, transcripts (UMIs) and genes detected per cell.
+
+<br>
+
+```{r plot_stats}
+# number of transcripts
+ggplot(dge_stats, aes(x = cell_barcode, y = transcripts)) +
+  geom_bar(stat = "identity") + 
+  labs(title = paste(snakemake@wildcards$sample, "number of transcripts")) +
+  theme_bw() +
+  theme(axis.text.x=element_blank(), axis.ticks.x=element_blank(), panel.grid = element_blank())
+
+# number of genic reads
+ggplot(dge_stats, aes(x = cell_barcode, y = genic_reads)) + 
+  geom_bar(stat = "identity") + 
+  labs(title = paste(snakemake@wildcards$sample, "number of genic reads")) +
+  theme_bw() +
+  theme(axis.text.x=element_blank(), axis.ticks.x=element_blank(), panel.grid = element_blank())
+
+# number of detected genes
+ggplot(dge_stats, aes(x = cell_barcode, y = genes)) + 
+  geom_bar(stat = "identity") + 
+  labs(title = paste(snakemake@wildcards$sample, "number of detected genes")) +
+  theme_bw() +
+  theme(axis.text.x=element_blank(), axis.ticks.x=element_blank(), panel.grid = element_blank())
+```
+
+## Genic reads vs. detected transcripts
+The number of detected transcripts is plotted against the number of genic reads. High quality cells
+are expected to show a reasonably good correlation of genic reads and transcripts. For bad cells (or
+wrong cell barcodes) genic reads tend to map to fewer transcripts and extremes can be detected as
+outliers in this plot.
+
+<br>
+
+```{r reads_vs_transcripts}
+# find max values for genic reads and transcripts
+max_values <- sapply(X = dge_stats[, c("genic_reads", "transcripts")], FUN = max)
+
+# create scatter plot
+p <- plot_ly(dge_stats) %>%
+  add_trace(x = ~transcripts, y = ~genic_reads, type = "scatter", mode = "markers",
+            marker = list(opacity = 0.75, line = list(width = 2)), hoverinfo = "text",
+            text = ~paste0("Cell barcode: ", cell_barcode, "\n",
+                           "Genic reads: ", genic_reads, "\n",
+                           "Transcripts: ", transcripts))
+
+# define axes and title
+xaxis <- list(title = "Number of detected transcripts (UMIs)", type = "log")
+yaxis <- list(title = "Number of genic reads", type = "log")
+title <- "Genic reads vs. transcripts"
+
+# add layout and print plot
+layout(p, xaxis = xaxis, yaxis = yaxis, title = title)
+```
+
+## Number of transcripts per cell distribution
+The number of detected transcripts per cell distribution is plotted to help identify low quality
+cells that should be filtered out during downstream analyses.
+
+<br>
+
+```{r transcripts_per_cell}
+# add index for plotting
+dge_stats$index <- 1:nrow(dge_stats)
+
+# create plot
+p <- plot_ly(dge_stats) %>%
+  add_trace(x = ~index, y = ~transcripts, type = "scatter", mode = "markers",
+            marker = list(color = "darkgray"), name = "Cells", hoverinfo = "none") %>%
+  add_trace(x ~index, y = ~transcripts, type = "scatter", mode = "lines",
+            line = list(color = "#1f77b4"), name = "transcripts per cell",
+            hoverinfo = "text", text = ~paste0("Cells: ", index, "\n",
+                            "UMIs cell i: ", transcripts))
+
+# define axes and title
+xaxis <- list(title = "Cell barcodes sorted by number of transcripts [descending]")
+yaxis <- list(title = "Number of transcripts", type = "log")
+title <- "Number of transcripts per cell"
+
+# add layout and print plot
+layout(p, xaxis = xaxis, yaxis = yaxis, title = title)
+```
+
+***
+
+# Source
+* <a download="dge_report.Rmd" href="`r base64enc::dataURI(file = params$rmd, mime = 'text/rmd',
+    encoding = 'base64')`">R Markdown source file (to produce this document)</a>
+* [Drop-seq webpage (McCarroll Lab)](http://mccarrolllab.com/dropseq/)
+* [Dixit et al., 2016](https://www.biorxiv.org/content/10.1101/093237v1)
+* [TPT filtering algorithm](https://github.com/asncd/schimera)
