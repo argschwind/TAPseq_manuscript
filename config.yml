@@ -102,3 +102,13 @@ umi_observations:
   
 extract_dge:
   tpt_threshold: 0.25
+
+perturbation_status:
+  vector_annot:
+    "CROPseq_dCas9_DS"
+  min_txs:
+    Sample10X: 4
+    11iv210ng: 8
+    11iv22ng:  8
+    8iv210ng:  8
+    8iv22ng:   8

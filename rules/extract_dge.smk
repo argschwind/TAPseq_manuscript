@@ -47,14 +47,35 @@ rule extract_dge:
   shell:
     "python scripts/extract_dge.py -i {input} -o {output.dge} "
     "--tpt_threshold {params.tpt_threshold} 2> {log}"
+    
+# infer perturbation status of each cell
+rule perturbation_status:
+  input:
+    "data/{sample}/dge_top_{ncells}_cells.txt"
+  output:
+    "data/{sample}/perturb_status_top_{ncells}_cells.txt"
+  log:
+    "data/{sample}/logs/perturbation_status_{ncells}_cells.log"
+  params:
+    vector_annot = config["perturbation_status"]["vector_annot"],
+    min_txs = lambda wildcards: config["perturbation_status"]["min_txs"][wildcards.sample]
+  conda:
+    "../envs/r_dropseq_tools.yml"
+  shell:
+    "Rscript scripts/perturbation_status.R -d {input} -o {output} -v {params.vector_annot} "
+    "-t {params.min_txs} 2> {log}"
 
 # compile dge report
 rule dge_report:
   input:
+    dge = "data/{sample}/dge_top_{ncells}_cells.txt",
     tpt_hist = "data/{sample}/dge_top_{ncells}_cells_tpt_histogram.txt",
-    dge_stats = "data/{sample}/dge_top_{ncells}_cells_summary.txt"
+    dge_stats = "data/{sample}/dge_top_{ncells}_cells_summary.txt",
+    perturb_stats = "data/{sample}/perturb_status_top_{ncells}_cells.txt"
   output:
     "results/dge/{sample}_{ncells}_cells_dge_report.html"
+  params:
+    vector_annot = config["perturbation_status"]["vector_annot"]
   conda:
     "../envs/r_dropseq_tools.yml"
   script:

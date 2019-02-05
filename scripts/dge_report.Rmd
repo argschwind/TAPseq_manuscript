@@ -1,5 +1,5 @@
 ---
-title: "Drop-seq DGE report"
+title: "CROP-seq DGE report"
 date: "`r format(Sys.time(), '%B %d, %Y')`"
 params:
   rmd: "dge_report.Rmd"
@@ -154,6 +154,86 @@ title <- "Number of transcripts per cell"
 
 # add layout and print plot
 layout(p, xaxis = xaxis, yaxis = yaxis, title = title)
+```
+
+***
+
+# Transfected vectors
+
+## Number of vector transcripts per cell
+The number of vector transcripts per cell is plotted.
+
+<br>
+
+```{r}
+# load dge data
+dge <- read.table(here(snakemake@input$dge), header = TRUE, stringsAsFactors = FALSE)
+
+# extract vector transcripts
+vctr_dge <- dge %>%
+  filter(grepl(GENE, pattern = snakemake@params$vector_annot)) %>%
+  gather(key = "cell", value = "txs", -GENE)
+  
+# count number of total vector molecules per cell
+vctr_txs_per_cell <- vctr_dge %>%
+  group_by(cell) %>%
+  summarize(vctr_txs = sum(txs))
+
+# plot number of transcripts per cell distribution
+ggplot(vctr_txs_per_cell, aes(vctr_txs)) +
+  geom_histogram(bins = 25) +
+  labs(x = "Vector transcripts", y = "Cells", title = "Vector transcripts per cell") +
+  theme_bw()
+```
+
+## Perturbations per cell
+The distribution of the number of perturbations per cell is plotted.
+
+<br>
+
+```{r}
+# load perturbation matrix
+perturb <- read.table(here(snakemake@input$perturb_stats), header = TRUE, stringsAsFactors = FALSE)
+
+# convert to long format
+perturb <- perturb %>%
+  gather(key = "vector", value = "pert", -cell_barcode)
+
+# compute the number of perturbations per cell
+pert_per_cell <- perturb %>%
+  group_by(cell_barcode) %>%
+  summarize(pert_per_cell = sum(pert)) %>%
+  count(pert_per_cell)
+
+# plot number of perturbations per cell
+ggplot(pert_per_cell, aes(x = pert_per_cell, y = n)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = n), vjust = 0) +
+  labs(x = "Perturbations", y = "Cells", title = "Perturbations per cell") +
+  theme_bw()
+```
+
+## Cells per perturbation
+The number of cell per detected perturbation (vector) is plotted to see if some vectors are depleted
+from the sample.
+
+<br>
+
+```{r}
+# calculate number of cells per perturbation
+cells_per_pert <- perturb %>%
+  group_by(vector) %>%
+  summarize(cells = sum(pert)) %>%
+  arrange(cells) %>%
+  mutate(vector = forcats::fct_inorder(vector))
+
+# plot number of cell per perturbation
+ggplot(cells_per_pert, aes(x = vector, y = cells)) +
+  geom_bar(stat = "identity") +
+  theme_bw() +
+  labs(x = "Perturbation", y = "Cells", title = "Number of cells per perturbation") +
+  coord_flip() +
+  theme_bw()
 ```
 
 ***
