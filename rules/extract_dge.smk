@@ -54,7 +54,7 @@ rule dge_report:
     tpt_hist = "data/{sample}/dge_top_{ncells}_cells_tpt_histogram.txt",
     dge_stats = "data/{sample}/dge_top_{ncells}_cells_summary.txt"
   output:
-    "reports/dge/{sample}_{ncells}_cells_dge_report.html"
+    "results/dge/{sample}_{ncells}_cells_dge_report.html"
   conda:
     "../envs/r_dropseq_tools.yml"
   script:

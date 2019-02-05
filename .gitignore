@@ -4,4 +4,4 @@
 .Ruserdata
 .snakemake
 data/
-reports/
+results/

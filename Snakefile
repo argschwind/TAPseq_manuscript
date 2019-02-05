@@ -15,7 +15,7 @@ include: "rules/analyses.smk"
 # sample under 'dge_ncells' in config file
 def dge_report_outfiles(sample):
   ncells = config["dge_ncells"][sample]  # get number of cells for sample
-  files = expand("reports/dge/{sample}_{ncells}_cells_dge_report.html",
+  files = expand("results/dge/{sample}_{ncells}_cells_dge_report.html",
              sample = sample, ncells = ncells)
   return files
  
@@ -25,7 +25,7 @@ def dge_report_outfiles(sample):
 # (samples and cells are read from config file)
 rule all:
   input:
-   align = expand("reports/alignment/{sample}_align_report.html", sample = config["samples"]),
+   align = expand("results/alignment/{sample}_align_report.html", sample = config["samples"]),
    dge = [dge_report_outfiles(sample) for sample in config["dge_ncells"]]
 
 # functions to run workflow only partially ---------------------------------------------------------
@@ -44,4 +44,4 @@ rule alignment_reference:
 # dge data and finishing the workflow
 rule align:
   input:
-    expand("reports/alignment/{sample}_align_report.html", sample = config["samples"])
+    expand("results/alignment/{sample}_align_report.html", sample = config["samples"])

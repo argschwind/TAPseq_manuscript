@@ -337,7 +337,7 @@ rule align_report:
     synthesis_error = "data/{sample}/bead_synthesis_error_summary.txt",
     reads_per_cell = "data/{sample}/reads_per_cell_barcode.txt"
   output:
-    "reports/alignment/{sample}_align_report.html"
+    "results/alignment/{sample}_align_report.html"
   params:
     expect_cells = lambda wildcards: config["expect_cell_numbers"][wildcards.sample],
     bc_structure = config["bc_structure"]
