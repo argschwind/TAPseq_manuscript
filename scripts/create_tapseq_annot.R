@@ -1,15 +1,17 @@
 #!/usr/bin/env Rscript
 
+# script to create custom tap-seq annotation data for read alignment
+
 # parse command line arguments ---------------------------------------------------------------------
 
 library("optparse")
 
 # create arguments list
 option_list = list(
-  make_option(c("-t", "--txs_file"), type = "character", default = NULL, 
+  make_option(c("-t", "--txs_file"), type = "character", default = NULL,
               help = "Path to transcripts annotation file (.gtf)",
               metavar = "character"),
-  make_option(c("-b", "--BSgenome_id"), type = "character", default = NULL, 
+  make_option(c("-b", "--BSgenome_id"), type = "character", default = NULL,
               help = "Identifier for used BSgenome", metavar = "character"),
   make_option(c("-f", "--fasta_outfile"), type = "character", default = NULL,
               help = "Path to .fasta output file", metavar = "character"),
@@ -23,22 +25,16 @@ opt = parse_args(opt_parser)
 
 # function to check for required arguments
 check_required_args <- function(arg, opt, opt_parser){
-  
   if (is.null(opt[[arg]])){
-    
     print_help(opt_parser)
     stop(arg, " argument is required!", call. = FALSE)
-    
   }
-  
 }
 
 # check that all required parameters are provided
 required_args <- c("txs_file", "BSgenome_id", "fasta_outfile", "gtf_outfile")
-for (i in required_args){
-  
+for (i in required_args) {
   check_required_args(i, opt = opt, opt_parser = opt_parser)
-  
 }
 
 # define functions ---------------------------------------------------------------------------------
