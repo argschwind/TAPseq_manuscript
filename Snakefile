@@ -9,16 +9,6 @@ include: "rules/align_reads.smk"
 include: "rules/extract_dge.smk"
 include: "rules/analyses.smk"
 
-# define required python functions -----------------------------------------------------------------
-
-# create all dge_report output files for a sample id based on the number cells specified for that
-# sample under 'dge_ncells' in config file
-def dge_report_outfiles(sample):
-  ncells = config["dge_ncells"][sample]  # get number of cells for sample
-  files = expand("results/dge/{sample}_{ncells}_cells_dge_report.html",
-             sample = sample, ncells = ncells)
-  return files
- 
 # ALL FUNCTION -------------------------------------------------------------------------------------
 
 # run whole workflow to align reads of all samples and extract dge for specified number of cells
@@ -26,7 +16,7 @@ def dge_report_outfiles(sample):
 rule all:
   input:
    align = expand("results/alignment/{sample}_align_report.html", sample = config["samples"]),
-   dge = [dge_report_outfiles(sample) for sample in config["dge_ncells"]]
+   dge = expand("results/dge/{sample}_dge_report.html", sample = config["samples"])
 
 # functions to run workflow only partially ---------------------------------------------------------
 

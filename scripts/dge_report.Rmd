@@ -22,7 +22,8 @@ library(plotly)
 ```
 
 This report summarizes the results from the Digital Gene Expression (DGE) extraction for sample
-**`r snakemake@wildcards$sample`**.
+**`r snakemake@wildcards$sample`**, for which expression data for
+**`r snakemake@config$dge_ncells[snakemake@wildcards$sample]` cells** were extracted.
 
 # Chimeric reads filtering
 To assess chimeric reads a measurement called "Transcripts-per-transcript (TPT)" proposed by
@@ -187,7 +188,9 @@ ggplot(vctr_txs_per_cell, aes(vctr_txs)) +
 ```
 
 ## Perturbations per cell
-The distribution of the number of perturbations per cell is plotted.
+The distribution of the number of detected perturbations per cell is plotted. A minimum number of
+`r snakemake@config$perturbation_status$min_txs[snakemake@wildcards$sample]` transcripts per vector
+were required to call perturbations.
 
 <br>
 
