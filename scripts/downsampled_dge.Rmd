@@ -1,0 +1,266 @@
+---
+title: "Downsampled DGE"
+author: "Andreas Gschwind"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+params:
+  rmd: "downsampled_dge.Rmd"
+output:
+  bookdown::html_document2:
+    toc: yes
+---
+
+# Goal
+DGE data of TAP-seq and CROP-seq was downsampled to the same sequencing depth. In this analysis,
+different number of cells are drawn from TAP-seq and CROP-seq to compare the power of each method to
+detect gene expression changes.
+```{css echo=FALSE}
+/* Define a margin before every image element */
+img {
+  margin-top: 3em;
+}
+```
+
+```{r setup, include=FALSE}
+# set global chunk options
+knitr::opts_chunk$set(echo = FALSE)
+
+# attach required packages
+library(tidyverse)
+library(here)
+```
+
+```{r loadData}
+# load inner primers to infer tap-seq target genes
+primers <- read.csv(here(snakemake@input$primers), stringsAsFactors = FALSE)
+
+# load 10x cell barcode whitelist
+whitelist_10x_cbc <- readLines(here(snakemake@input$whitelist))
+
+# perturbation status files
+pert_files <- here(snakemake@input$pert_status)
+names(pert_files) <- basename(dirname(pert_files))
+
+# load perturbation status files
+pert_status <- lapply(pert_files, FUN = read.table, header = TRUE, stringsAsFactors = FALSE)
+
+# dge input files
+dge_files <- here(snakemake@input$dge)
+names(dge_files) <- basename(sub("/downsampled", "", dirname(dge_files)))
+
+# load dge data
+dge <- lapply(dge_files, FUN = read.table, header = TRUE, stringsAsFactors = FALSE)
+```
+
+```{r perturbations}
+# transform perturbation status matrices to long format and convert to long format, transform  into
+# one data.frame
+pert_status <- pert_status %>%
+  lapply(FUN = gather, key = "vector", value = "pert", -cell_barcode) %>%
+  bind_rows(.id = "sample")
+
+# split vector id into vector, perturbation target and gRNA id
+pert_status <- pert_status %>%
+  mutate(vector = sub("CROPseq_dCas9_", "", vector)) %>%  # remove redundancies
+  mutate(vector = sub("SCR", "SCR_", vector)) %>%  # add "_" into SCR gRNA ids
+  separate(vector, sep = "_", into = c("vector", "target", "grna"))
+
+# only retain targets to merge multiple gRNAs targeting the same enhancer and only retain data on
+# successful perturbations
+pert_status <- pert_status %>%
+  select(sample, cell_barcode, target, pert) %>%
+  filter(pert == 1) %>%
+  group_by(sample, cell_barcode, target) %>%
+  summarize(pert = sum(pert))
+```
+
+```{r dgeData}
+# known enhancer target genes
+known_enh <- c("MYC", "GATA1", "ZFPM2", "HBB", "HBD", "HBE1", "HBG1", "HBG2")
+
+# chromosome 11 inhibition target genes
+chr11_genes <- primers %>%
+  filter(screen == "inhibition" & panel == "chr11_hs2") %>%
+  pull(seq_id) %>%
+  c(known_enh)
+
+# chromosome 8 inhibition target genes
+chr8_genes <- primers %>%
+  filter(screen == "inhibition" & panel %in% c("chr8_zfpm2", "chr8_myc")) %>%
+  pull(seq_id) %>%
+  c(known_enh)
+
+# only retain chr11, chr8 and known enhancer genes and convert to one data.frame
+dge_filt <- dge %>%
+  lapply(., FUN = function(x) filter(x, GENE %in% c(chr11_genes, chr8_genes)) ) %>%
+  lapply(., FUN = gather, key = "cell_barcode", value = "txs", -GENE) %>%
+  bind_rows(.id = "sample")
+
+# combine perturbations and dge data. Only cells with detected perturbations are retained and if a
+# cell is perturbed for 2 different targets, the dge rows will be duplicated. finally remove any
+# cell barcode not on the 10x cell barcode list and add variable for experiment type
+dge_pert <- dge_filt %>%
+  inner_join(pert_status, by = c("sample", "cell_barcode")) %>%
+  filter(cell_barcode %in% whitelist_10x_cbc) %>%
+  mutate(exp = if_else(sample == "Sample10X", true = "cropseq", false = "tapseq"))
+
+# duplicate Sample10X data, one for each panel (chr11 & chr8)
+dge_panels <- dge_pert %>%
+  mutate(sample = if_else(sample == "Sample10X", true = "Sample10Xchr11", false =  sample)) %>%
+  bind_rows(filter(dge_pert, sample == "Sample10X")) %>%
+  mutate(sample = if_else(sample == "Sample10X", true = "Sample10Xchr8", false =  sample))
+
+# add variable to assign each row to either chr11 or chr8 experiments (or none if spurious dge)
+chr11_samples <- c("11iv210ng", "11iv22ng", "Sample10Xchr11")
+chr8_samples <- c("8iv210ng", "8iv22ng", "Sample10Xchr8")
+
+dge_panels <- dge_panels %>%
+  mutate(panel = if_else(GENE %in% chr11_genes & sample %in% chr11_samples,
+                         true = "chr11", false = "none")) %>%
+  mutate(panel = if_else(GENE %in% chr8_genes & sample %in% chr8_samples,
+                         true = "chr8", false = panel)) %>%
+  mutate(sample = sub(sample, pattern = "chr.*", replacement = ""))
+
+# remove any gene expression data that does not belong to a panel
+dge_panels <- filter(dge_panels, panel != "none")
+```
+
+# Downsample cell numbers
+```{r dsFunction}
+# function to repeatedly sample across different sampling sizes and calculate average gene
+# expression for each drawn sample of cells
+sample_cells_avg_genex <- function(x, sizes, times, pseudo_count = 1){
+  
+  # set names so that sampling output will include sampling size
+  names(sizes) <- sizes
+  
+  # add pseudo count and convert x to wide format for easier sampling (one unique cell per row)
+  x <- x %>%
+    mutate(txs = txs + pseudo_count) %>%
+    spread(key = "GENE", value = "txs", fill = pseudo_count)  # with pseudo count for any implied 0s
+  
+  # sample cells and calculate average gene expression
+  sampled_avg <- lapply(sizes, FUN = function(size, x, times) {
+    output <- replicate(times, sample_avg_genex(x, size = size), simplify = TRUE)
+    colnames(output) <- paste0("i", seq_len(times))
+    rownames_to_column(as.data.frame(output), var = "gene")
+  }, x = x, times = times)
+  
+  # convert to one large data.frame
+  bind_rows(sampled_avg, .id = "size")
+  
+}
+
+# function to sample a dge data.frame and calculate average gene expression
+sample_avg_genex <- function(x, size){
+  
+  # sample rows
+  rows <- sample(seq_len(nrow(x)), size = size, replace = TRUE)
+  
+  # calculate avgerage gene expression
+  colMeans(x[rows, -c(1:6)])
+
+}
+```
+
+```{r dsCells}
+# desired sampling sizes and replicates per sampling size
+sizes <- c(50, 100, 200)
+times <- 1000
+
+# calculate downsampled average gene expression across different number of cells for both panels
+set.seed(20190705)
+ds_avg_genex <- dge_panels %>%
+  group_by(panel, exp, target) %>%
+  do(sample_cells_avg_genex(., sizes = sizes, times = times)) %>%
+  mutate(size = as.integer(size))
+
+# reformat data, so that each row contains one perturbation and the scrampled control expression and
+# calculate log-fold change
+lfc <- ds_avg_genex %>%
+  gather(key = "iteration", value = "avg_genex", -c(panel, exp, target, size, gene)) %>%
+  spread(key = "target", value = "avg_genex") %>%
+  gather(key = "target", value = "avg_genex", -c(panel, exp, size, iteration, gene, SCR)) %>%
+  rename("scr_ctrl" = SCR) %>%
+  mutate(lfc = log2(avg_genex) - log2(scr_ctrl))
+
+# calculate mean, median and 95% intervals for each experiment, perturbation, sampling size and gene
+lfc_stats <- lfc %>%
+  group_by(panel, exp, target, size, gene) %>%
+  summarize(avg_lfc = mean(lfc),
+            med_lfc = median(lfc),
+            lower_95 = quantile(lfc, 0.025),
+            upper_95 = quantile(lfc, 0.975))
+```
+
+```{r plot, fig.height=5, fig.width=8}
+# function to plot lfc across sampling sizes of tap-seq vs crop-seq
+plot_lfc <- function(lfc_stats, perturbation, target_genes){
+  
+  # get lfc data for given perturbation and reformat for plotting
+  lfc_pert <- lfc_stats %>%
+    filter(target == perturbation) %>%
+    gather(key = "stat", value = "value", -c(panel, exp, target, size, gene)) %>%
+    unite(col = "stat", exp, stat) %>%
+    spread(key = "stat", value = "value")
+  
+  # remove any genes that are only present in one experiment (lead to NA in spread())
+  lfc_pert <- drop_na(lfc_pert)
+  
+  # add variable to identify target genes of given perturbation
+  lfc_pert <- lfc_pert %>%  
+    mutate(type = if_else(gene %in% target_genes, true = "target", false = "non-target"))
+  
+  # axis limits
+  lim <- range(c(unlist(lfc_pert[, c(6, 10)]),  # all average lfcs
+                 unlist(filter(lfc_pert, type == "target")[, c(6,8,10,12)])))  # 95% ci target genes 
+  
+  # create plots
+  ggplot(lfc_pert, aes(x = tapseq_avg_lfc, y = cropseq_avg_lfc)) +
+    facet_wrap(~size, ncol = 4) +
+    geom_vline(xintercept = 0, lty = "dashed", lwd = 0.6, col = "darkgray") +
+    geom_hline(yintercept = 0, lty = "dashed", lwd = 0.6, col = "darkgray") +
+    geom_point(color = "darkgray", size = 0.5) +
+    geom_errorbar(data = filter(lfc_pert, type == "target"),
+                  aes(ymin = cropseq_lower_95, ymax = cropseq_upper_95),
+                  width = diff(lim) / 20) +
+    geom_errorbarh(data = filter(lfc_pert, type == "target"),
+                   aes(xmin = tapseq_lower_95, xmax = tapseq_upper_95),
+                   height = diff(lim) / 20) +
+    geom_label(data = filter(lfc_pert, type == "target"), aes(label = gene), size = 2.5) +
+    labs(title = perturbation, x = "TAP-seq", y = "CROP-seq") +
+    coord_fixed(xlim = lim, ylim = lim) +
+    theme_bw()
+  
+}
+
+# list of perturbations and their target genes
+perturbations <- list(eGATA1 = "GATA1", eMYC = "MYC", eZFPM2 = "ZFPM2",
+                      eHS2 = c("HBB", "HBD", "HBE1", "HBG1", "HBG2"))
+
+# create plots for chr11 and chr8 panels
+plots_chr11 <- lapply(names(perturbations), FUN = function(x){
+  plot_lfc(filter(lfc_stats, panel == "chr11"), perturbation = x, target_genes = perturbations[[x]])
+})
+
+plots_chr8 <- lapply(names(perturbations), FUN = function(x){
+  plot_lfc(filter(lfc_stats, panel == "chr8"), perturbation = x, target_genes = perturbations[[x]])
+})
+```
+
+**Chromosome 11 samples**
+
+```{r}
+for (i in plots_chr11) print(i)
+```
+
+**Chromosome 8 samples**
+
+```{r}
+for (i in plots_chr8) print(i)
+```
+
+***
+
+# Source
+* <a download="downsampled_dge.Rmd" href="`r base64enc::dataURI(file = params$rmd,
+    mime = 'text/rmd', encoding = 'base64')`">R Markdown source file (to produce this document)</a>

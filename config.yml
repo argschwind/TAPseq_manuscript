@@ -112,3 +112,7 @@ perturbation_status:
     11iv22ng:  8
     8iv210ng:  8
     8iv22ng:   8
+    
+# step 4: analysis ---------------------------------------------------------------------------------
+downsample:
+ reads_per_cell: 3500
