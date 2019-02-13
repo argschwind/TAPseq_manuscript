@@ -172,7 +172,7 @@ dge <- read.table(here(snakemake@input$dge), header = TRUE, stringsAsFactors = F
 
 # extract vector transcripts
 vctr_dge <- dge %>%
-  filter(grepl(GENE, pattern = snakemake@params$vector_annot)) %>%
+  filter(grepl(GENE, pattern = snakemake@params$vector_prefix)) %>%
   gather(key = "cell", value = "txs", -GENE)
   
 # count number of total vector molecules per cell

@@ -33,10 +33,10 @@ bc_structure: [1-16, 17-26]
 # alignment reference for each sample
 align_ref:
   Sample10X: data/genome_reference
-  11iv210ng: data/tapseq_reference
-  11iv22ng:  data/tapseq_reference
-  8iv210ng:  data/tapseq_reference
-  8iv22ng:   data/tapseq_reference
+  11iv210ng: data/tapseq_ref_validation
+  11iv22ng:  data/tapseq_ref_validation
+  8iv210ng:  data/tapseq_ref_validation
+  8iv22ng:   data/tapseq_ref_validation
 
 # sample ids for validation and screen TAP-seq runs
 validation: [11iv210ng, 11iv22ng, 8iv210ng, 8iv22ng, Sample10X]
@@ -50,13 +50,20 @@ download_genome_annot:
   gtf_url: ftp://ftp.ensembl.org/pub/release-89/gtf/homo_sapiens/Homo_sapiens.GRCh38.89.gtf.gz
   
 create_tapseq_ref:
-  tapseq_genes: meta_data/k562_tapseq_target_genes.gtf
+  target_genes: 
+    tapseq_ref_validation:   meta_data/target_genes_validation.gtf
+    tapseq_ref_chr8_screen:  meta_data/target_genes_chr8_screen.gtf
+    tapseq_ref_chr11_screen: meta_data/target_genes_chr11_screen.gtf
   BSgenome_id: BSgenome.Hsapiens.UCSC.hg38
   
 create_vector_ref:
-  vector_fasta: meta_data/cropseq_vectors_fasta
-  fasta_ext: ".fasta"
-  fasta_line: 80
+  vector_fasta:
+    genome_reference: meta_data/cropseq_vectors_validation.fasta
+    tapseq_ref_validation:   meta_data/cropseq_vectors_validation.fasta
+    tapseq_ref_chr8_screen:  meta_data/cropseq_vectors_chr8_screen.fasta
+    tapseq_ref_chr11_screen: meta_data/cropseq_vectors_chr11_screen.fasta
+  vector_prefix:
+    "CROPseq_dCas9_DS"
   
 create_genomedir:
   star_threads: 5
@@ -104,8 +111,6 @@ extract_dge:
   tpt_threshold: 0.25
 
 perturbation_status:
-  vector_annot:
-    "CROPseq_dCas9_DS"
   min_txs:
     Sample10X: 4
     11iv210ng: 8

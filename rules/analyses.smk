@@ -41,7 +41,7 @@ rule reads_on_target:
   output:
     "data/reads_on_target.csv"
   params:
-    vector_annot = config["perturbation_status"]["vector_annot"]
+    vector_prefix = config["create_vector_ref"]["vector_prefix"]
   conda:
     "../envs/r_analyses.yml"
   script:
@@ -66,7 +66,7 @@ rule downsampled_dge:
   input:
     dge = expand("data/{sample}/downsampled_dge.txt", sample = config["validation"]),
     pert_status = expand("data/{sample}/perturb_status.txt", sample = config["validation"]),
-    primers = "meta_data/k562_tapseq_inner_fwd_primers.csv",
+    target_genes = "meta_data/target_genes_validation.csv",
     whitelist = "meta_data/10x_bc_whitelist_737k_201608.txt"
   output:
     "results/downsampled_dge.html"

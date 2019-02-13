@@ -58,12 +58,12 @@ rule perturbation_status:
   log:
     "data/{sample}/logs/perturbation_status.log"
   params:
-    vector_annot = config["perturbation_status"]["vector_annot"],
+    vector_prefix = config["create_vector_ref"]["vector_prefix"],
     min_txs = lambda wildcards: config["perturbation_status"]["min_txs"][wildcards.sample]
   conda:
     "../envs/r_dropseq_tools.yml"
   shell:
-    "Rscript scripts/perturbation_status.R -d {input} -o {output} -v {params.vector_annot} "
+    "Rscript scripts/perturbation_status.R -d {input} -o {output} -v {params.vector_prefix} "
     "-t {params.min_txs} 2> {log}"
 
 # compile dge report
@@ -76,7 +76,7 @@ rule dge_report:
   output:
     "results/dge/{sample}_dge_report.html"
   params:
-    vector_annot = config["perturbation_status"]["vector_annot"]
+    vector_prefix = config["create_vector_ref"]["vector_prefix"]
   conda:
     "../envs/r_dropseq_tools.yml"
   script:

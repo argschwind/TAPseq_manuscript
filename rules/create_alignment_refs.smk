@@ -20,7 +20,7 @@ rule download_genome_annot:
     
 rule create_tapseq_annot:
   input:
-    config["create_tapseq_ref"]["tapseq_genes"]
+    lambda wildcards: config["create_tapseq_ref"]["target_genes"][wildcards.align_ref]
   output:
     fasta = temp("data/{align_ref}/genome.fasta"),
     gtf = temp("data/{align_ref}/genome.gtf")
@@ -36,18 +36,18 @@ rule create_tapseq_annot:
 
 rule create_vector_ref:
   input:
-    config["create_vector_ref"]["vector_fasta"]
+    lambda wildcards: config["create_vector_ref"]["vector_fasta"][wildcards.align_ref]
   output:
     fasta = temp("data/{align_ref}/cropseq_vectors.fasta"),
     gtf = temp("data/{align_ref}/cropseq_vectors.gtf")
   params:
     output_bn = "data/{align_ref}/cropseq_vectors",
-    fasta_ext = config["create_vector_ref"]["fasta_ext"],
-    fasta_line = config["create_vector_ref"]["fasta_line"]
+    vector_prefix = config["create_vector_ref"]["vector_prefix"]
   conda:
     "../envs/dropseq_tools.yml"
   shell:
-    "python scripts/cropseq_vector_reference.py -i {input} -o {params.output_bn}"
+    "python scripts/cropseq_vector_reference.py -i {input} -o {params.output_bn} "
+    "--prefix {params.vector_prefix}"
 
 rule create_cropseq_ref:
   input:

@@ -30,8 +30,8 @@ library(here)
 ```
 
 ```{r loadData}
-# load inner primers to infer tap-seq target genes
-primers <- read.csv(here(snakemake@input$primers), stringsAsFactors = FALSE)
+# load tap-seq target genes
+target_genes <- read.csv(here(snakemake@input$target_genes), stringsAsFactors = FALSE)
 
 # load 10x cell barcode whitelist
 whitelist_10x_cbc <- readLines(here(snakemake@input$whitelist))
@@ -74,19 +74,21 @@ pert_status <- pert_status %>%
 ```
 
 ```{r dgeData}
-# known enhancer target genes
-known_enh <- c("MYC", "GATA1", "ZFPM2", "HBB", "HBD", "HBE1", "HBG1", "HBG2")
+# known enhancer targets for validation
+known_enh <- target_genes %>%
+  filter(screen == "validation") %>%
+  pull(gene)
 
 # chromosome 11 inhibition target genes
-chr11_genes <- primers %>%
+chr11_genes <- target_genes %>%
   filter(screen == "inhibition" & panel == "chr11_hs2") %>%
-  pull(seq_id) %>%
+  pull(gene) %>%
   c(known_enh)
 
 # chromosome 8 inhibition target genes
-chr8_genes <- primers %>%
+chr8_genes <- target_genes %>%
   filter(screen == "inhibition" & panel %in% c("chr8_zfpm2", "chr8_myc")) %>%
-  pull(seq_id) %>%
+  pull(gene) %>%
   c(known_enh)
 
 # only retain chr11, chr8 and known enhancer genes and convert to one data.frame

@@ -6,6 +6,7 @@ channels:
 dependencies:
   - wget=1.19.5
   - python=3.6.6
+  - biopython=1.72
   - pandas=0.24.0
   - numpy=1.16.0
   - star=2.5.3a
