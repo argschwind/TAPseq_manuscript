@@ -63,8 +63,8 @@ rule perturbation_status:
   conda:
     "../envs/r_dropseq_tools.yml"
   shell:
-    "Rscript scripts/perturbation_status.R -d {input} -o {output} -v {params.vector_prefix} "
-    "-t {params.min_txs} 2> {log}"
+    "Rscript scripts/perturbation_status.R --infile {input} --outfile {output} "
+    "--vector_patter {params.vector_prefix} --min_txs {params.min_txs} --trim 2> {log}"
 
 # compile dge report
 rule dge_report:
