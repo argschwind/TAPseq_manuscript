@@ -32,9 +32,9 @@ dir.create("results/plots", showWarnings = FALSE)
 ```
 
 # Target gene enrichment
-The number of genome reads in the raw data (fastq) was counted for all samples. Similaril the number
-of reads aligned to target genes in the final .bam files was counted. The percentage of all read
-mapping to target genes is then compared between conventional CROP-seq and TAP-seq.
+The number of genome reads in the raw data (fastq) was counted for all samples. Similarily the
+number of reads aligned to target genes in the final .bam files was counted. The percentage of all
+read mapping to target genes is then compared between conventional CROP-seq and TAP-seq.
 ```{r plotReadsOnTarget, fig.cap=cap, fig.width=2.5, fig.height=3.5}
 # load read counts
 read_counts <- read.csv(here(snakemake@input$reads_on_target), stringsAsFactors = FALSE)
@@ -185,31 +185,40 @@ ggsave(here("results/plots/lfc_tapseq_vs_cropseq.pdf"), device = "pdf", height =
 ***
 
 # Number of detected genes per cell
-```{r detectionSensitivity, fig.cap=cap, fig.height=4, fig.width=6}
-# add variable for experimantal approach to dge data
+```{r detectionSensitivity, fig.cap=cap, fig.height=5, fig.width=6}
+# add variable for experiment each sample belonged to
 dge_filt <- dge_filt %>%
-  mutate(approach = if_else(sample == "Sample10X", true = "cropseq", false = "tapseq"))
+  mutate(exp = if_else(sample %in% c("11iv210ng", "11iv22ng"), true = "chr11", false = "cropseq")) %>%
+  mutate(exp = if_else(sample %in% c("8iv210ng", "8iv22ng"), true = "chr8", false = exp))
 
 # calculate number of cells in which a gene is detected
 cells_genes <- dge_filt %>%
-  group_by(approach, gene) %>%
+  group_by(exp, gene) %>%
   summarize(avg_txs = mean(txs),
-            cells = sum(txs > 0),
             perc_cells = mean(txs > 0))
 
 # compute expression quantile for each gene based on CROP-seq
 expr_quantiles <- cells_genes %>%
   ungroup() %>%
-  filter(approach == "cropseq") %>%
-  mutate(quantile = ntile(avg_txs, 5)) %>%
+  filter(exp == "cropseq") %>%
+  mutate(quantile = ntile(avg_txs, 4)) %>%
   select(gene, quantile)
 
 # add expression quantile to each gene (all experiments)
 cells_genes <- left_join(cells_genes, expr_quantiles, by = "gene")
 
+# reformat for plot
+cells_genes <- cells_genes %>%
+  select(-avg_txs) %>%
+  spread(key = "exp", value = "perc_cells") %>%
+  gather(key = "exp", value = "tapseq", -c(gene, quantile, cropseq)) %>%
+  drop_na() %>%
+  gather(key = "approach", value = "perc_cells", -c(gene, quantile, exp))
+
 # create boxplot
 ggplot(cells_genes, aes(x = as.factor(quantile), y = perc_cells, fill = approach)) +
-  geom_boxplot() + 
+  facet_wrap(~exp, ncol = 1, nrow = 2)+
+  geom_boxplot() +
   labs(y = "Cells in which genes are detected", x = "CROP-seq expression quantiles",
        fill = "Method") +
   scale_y_continuous(labels = scales::percent) +
@@ -221,7 +230,7 @@ ggplot(cells_genes, aes(x = as.factor(quantile), y = perc_cells, fill = approach
 cap <- "Detection sensitivity TAP-seq vs. CROP-seq (all genes should be expressed in K562)"
 
 # save plot to file
-ggsave(here("results/plots/detection_sensitivity.pdf"), device = "pdf", height = 4, width = 6)
+ggsave(here("results/plots/detection_sensitivity.pdf"), device = "pdf", height = 5, width = 6)
 ```
 
 ***
