@@ -62,16 +62,15 @@ infer_pert <- function(dge, vector_pattern, min_txs) {
   vctrs <- grep(dge$GENE, pattern = vector_pattern)
   vctr_dge <- dge[vctrs, ]
   
-  # make GENE to rownames and transpose
+  # move gene name to rownames
   rownames(vctr_dge) <- vctr_dge$GENE
   vctr_dge <- vctr_dge[, which(colnames(vctr_dge) != "GENE")]
-  vctr_dge <- t(vctr_dge)
   
   # infer perturbation status of each cell
-  pert <- (vctr_dge >= min_txs) * 1
-  
-  # add column for cell barcode
-  pert <- cbind("cell_barcode" = rownames(pert), pert)
+  pert <- as.data.frame((vctr_dge >= min_txs) * 1)
+
+  # add column for vector id
+  pert <- cbind.data.frame("VECTOR" = rownames(pert), pert, stringsAsFactors = FALSE)
   rownames(pert) <- NULL
   
   return(pert)
@@ -90,7 +89,7 @@ pert_status <- infer_pert(dge, vector_pattern = opt$vector_pattern, min_txs = op
 if (opt$trim_id == TRUE) {
   
   message("Trimming vector pattern from vector IDs...")
-  colnames(pert_status) <- sub(opt$vector_pattern, "", colnames(pert_status))
+  pert_status$VECTOR <- sub(opt$vector_pattern, "", pert_status$VECTOR)
   
 }
 

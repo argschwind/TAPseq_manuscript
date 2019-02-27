@@ -109,25 +109,40 @@ outliers in this plot.
 <br>
 
 ```{r reads_vs_transcripts}
-# find max values for genic reads and transcripts
-max_values <- sapply(X = dge_stats[, c("genic_reads", "transcripts")], FUN = max)
-
-# create scatter plot
-p <- plot_ly(dge_stats) %>%
-  add_trace(x = ~transcripts, y = ~genic_reads, type = "scatter", mode = "markers",
-            marker = list(opacity = 0.75, line = list(width = 2)), hoverinfo = "text",
-            text = ~paste0("Cell barcode: ", cell_barcode, "\n",
-                           "Genic reads: ", genic_reads, "\n",
-                           "Transcripts: ", transcripts))
-
-# define axes and title
-xaxis <- list(title = "Number of detected transcripts (UMIs)", type = "log")
-yaxis <- list(title = "Number of genic reads", type = "log")
-title <- "Genic reads vs. transcripts"
-
-# add layout and print plot
+# create scatter plot with plotly for small datasets or ggplot for larget datasets (>20k cells)
+if (nrow(dge_stats) <= 20000) {
+  
+  # create scatter plot
+  p <- plot_ly(dge_stats) %>%
+    add_trace(x = ~transcripts, y = ~genic_reads, type = "scatter", mode = "markers",
+              marker = list(opacity = 0.75, line = list(width = 2)), hoverinfo = "text",
+              text = ~paste0("Cell barcode: ", cell_barcode, "\n",
+                             "Genic reads: ", genic_reads, "\n",
+                             "Transcripts: ", transcripts))
+  
+  # define axes and title
+  xaxis <- list(title = "Number of detected transcripts (UMIs)", type = "log")
+  yaxis <- list(title = "Number of genic reads", type = "log")
+  title <- "Genic reads vs. transcripts"
+  
+  # add layout and print plot
 layout(p, xaxis = xaxis, yaxis = yaxis, title = title)
+  
+}else{
+
+  # create scatter plot
+  ggplot(dge_stats, aes(x = transcripts, y = genic_reads)) +
+    geom_abline() +
+    geom_point(color = "#1f77b4") +
+    labs(x = "Number of detected transcripts (UMIs)", y = "Number of genic reads",
+         title = "Genic reads vs. transcripts") +
+    scale_x_log10() +
+    scale_y_log10() +
+    theme_bw()
+
+}
 ```
+
 
 ## Number of transcripts per cell distribution
 The number of detected transcripts per cell distribution is plotted to help identify low quality
@@ -139,22 +154,37 @@ cells that should be filtered out during downstream analyses.
 # add index for plotting
 dge_stats$index <- 1:nrow(dge_stats)
 
-# create plot
-p <- plot_ly(dge_stats) %>%
-  add_trace(x = ~index, y = ~transcripts, type = "scatter", mode = "markers",
-            marker = list(color = "darkgray"), name = "Cells", hoverinfo = "none") %>%
-  add_trace(x ~index, y = ~transcripts, type = "scatter", mode = "lines",
-            line = list(color = "#1f77b4"), name = "transcripts per cell",
-            hoverinfo = "text", text = ~paste0("Cells: ", index, "\n",
-                            "UMIs cell i: ", transcripts))
+# create scatter plot with plotly for small datasets or ggplot for larget datasets (>20k cells)
+if (nrow(dge_stats) <= 20000) {
 
-# define axes and title
-xaxis <- list(title = "Cell barcodes sorted by number of transcripts [descending]")
-yaxis <- list(title = "Number of transcripts", type = "log")
-title <- "Number of transcripts per cell"
-
-# add layout and print plot
-layout(p, xaxis = xaxis, yaxis = yaxis, title = title)
+  # create plot
+  p <- plot_ly(dge_stats) %>%
+    add_trace(x = ~index, y = ~transcripts, type = "scatter", mode = "markers",
+              marker = list(color = "darkgray"), name = "Cells", hoverinfo = "none") %>%
+    add_trace(x ~index, y = ~transcripts, type = "scatter", mode = "lines",
+              line = list(color = "#1f77b4"), name = "transcripts per cell",
+              hoverinfo = "text", text = ~paste0("Cells: ", index, "\n",
+                              "UMIs cell i: ", transcripts))
+  
+  # define axes and title
+  xaxis <- list(title = "Cell barcodes sorted by number of transcripts [descending]")
+  yaxis <- list(title = "Number of transcripts", type = "log")
+  title <- "Number of transcripts per cell"
+  
+  # add layout and print plot
+  layout(p, xaxis = xaxis, yaxis = yaxis, title = title)
+  
+}else{
+  
+  ggplot(dge_stats, aes(x = index, y = transcripts)) +
+    geom_point(color = "darkgray") +
+    geom_line(color = "#1f77b4") +
+    labs(x = "Cell barcodes sorted by number of transcripts [descending]",
+         y = "Number of transcripts", title = "Number of transcripts per cell") +
+    scale_y_log10() +
+    theme_bw()
+  
+}
 ```
 
 ***
@@ -200,11 +230,11 @@ perturb <- read.table(here(snakemake@input$perturb_stats), header = TRUE, string
 
 # convert to long format
 perturb <- perturb %>%
-  gather(key = "vector", value = "pert", -cell_barcode)
+  gather(key = "cell", value = "pert", -VECTOR)
 
 # compute the number of perturbations per cell
 pert_per_cell <- perturb %>%
-  group_by(cell_barcode) %>%
+  group_by(cell) %>%
   summarize(pert_per_cell = sum(pert)) %>%
   count(pert_per_cell)
 
@@ -225,18 +255,23 @@ from the sample.
 ```{r}
 # calculate number of cells per perturbation
 cells_per_pert <- perturb %>%
-  group_by(vector) %>%
-  summarize(cells = sum(pert)) %>%
-  arrange(cells) %>%
-  mutate(vector = forcats::fct_inorder(vector))
+  group_by(VECTOR) %>%
+  summarize(cells = sum(pert))
 
 # plot number of cell per perturbation
-ggplot(cells_per_pert, aes(x = vector, y = cells)) +
+p <- ggplot(cells_per_pert,
+            aes(x = forcats::fct_reorder(VECTOR, .x = cells, .desc = TRUE), y = cells)) +
   geom_bar(stat = "identity") +
   theme_bw() +
   labs(x = "Perturbation", y = "Cells", title = "Number of cells per perturbation") +
-  coord_flip() +
   theme_bw()
+
+# print plot with layout appropriate for number of perturbations
+if (nrow(cells_per_pert) <= 20) {
+  p + coord_flip()
+}else{
+  p + theme(axis.text.x=element_blank(), axis.ticks.x=element_blank(), panel.grid = element_blank())
+}
 ```
 
 ***
