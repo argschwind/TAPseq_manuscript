@@ -60,7 +60,7 @@ rule tag_cell_barcodes:
   log:
     "data/{sample}/logs/tag_cell_barcodes.log"
   params:
-    base_range = config["bc_structure"][0],
+    base_range = lambda wildcards: config["bc_structure"][wildcards.sample][0],
     base_qual = config["tag_cell_barcodes"]["base_quality"],
     bases_below_qual = config["tag_cell_barcodes"]["num_bases_below_quality"]
   conda:
@@ -88,7 +88,7 @@ rule tag_molecule_barcodes:
   log:
     "data/{sample}/logs/tag_molecule_barcodes.log"
   params:
-    base_range = config["bc_structure"][1],
+    base_range = lambda wildcards: config["bc_structure"][wildcards.sample][1],
     base_qual = config["tag_cell_barcodes"]["base_quality"],
     bases_below_qual = config["tag_cell_barcodes"]["num_bases_below_quality"]
   conda:
@@ -340,7 +340,7 @@ rule align_report:
     "results/alignment/{sample}_align_report.html"
   params:
     expect_cells = lambda wildcards: config["expect_cell_numbers"][wildcards.sample],
-    bc_structure = config["bc_structure"]
+    bc_structure = lambda wildcards: config["bc_structure"][wildcards.sample]
   conda:
     "../envs/r_dropseq_tools.yml"
   script:

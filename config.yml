@@ -2,45 +2,73 @@
 
 # sample id: /path/to/fastq/directory
 samples:
-  Sample10X: /g/steinmetz/incoming/solexa/2018-11-22-H3372BGX9/lane1/LIB38089_RBA37572/fastq
-  11iv210ng: /g/steinmetz/incoming/solexa/2018-11-22-H3372BGX9/lane1/LIB38090_RBA37573/fastq
-  11iv22ng:  /g/steinmetz/incoming/solexa/2018-11-22-H3372BGX9/lane1/LIB38091_RBA37574/fastq
-  8iv210ng:  /g/steinmetz/incoming/solexa/2018-11-22-H3372BGX9/lane1/LIB38087_RBA37570/fastq
-  8iv22ng:   /g/steinmetz/incoming/solexa/2018-11-22-H3372BGX9/lane1/LIB38088_RBA37571/fastq
+  Sample10X:  /g/steinmetz/incoming/solexa/2018-11-22-H3372BGX9/lane1/LIB38089_RBA37572/fastq
+  11iv210ng:  /g/steinmetz/incoming/solexa/2018-11-22-H3372BGX9/lane1/LIB38090_RBA37573/fastq
+  11iv22ng:   /g/steinmetz/incoming/solexa/2018-11-22-H3372BGX9/lane1/LIB38091_RBA37574/fastq
+  8iv210ng:   /g/steinmetz/incoming/solexa/2018-11-22-H3372BGX9/lane1/LIB38087_RBA37570/fastq
+  8iv22ng:    /g/steinmetz/incoming/solexa/2018-11-22-H3372BGX9/lane1/LIB38088_RBA37571/fastq
+  8iScreen1:  /g/steinmetz/project/singcellTxn/CRISPRdrop/10X_RAW_DATA/k562_screen_Feb2019/8iScreen1
+  11iScreen1: /g/steinmetz/project/singcellTxn/CRISPRdrop/10X_RAW_DATA/k562_screen_Feb2019/11iScreen1
 
 # rough A PRIORI estimate of the number of sequenced cells per sample. this is only used during
 # alignment not dge extraction
 expect_cell_numbers:
-  Sample10X: 10000
-  11iv210ng: 8000
-  11iv22ng:  8000
-  8iv210ng:  8000
-  8iv22ng:   8000
+  Sample10X:  10000
+  11iv210ng:  8000
+  11iv22ng:   8000
+  8iv210ng:   8000
+  8iv22ng:    8000
+  8iScreen1:  100000
+  11iScreen1: 100000
 
 # number of cells for which dge data should be extracted. these can be arrays to extract dge for
 # multiple sets of cells per sample
 dge_ncells:
-  Sample10X: 8000
-  11iv210ng: 8500
-  11iv22ng:  8500
-  8iv210ng:  7500
-  8iv22ng:   7500
+  Sample10X:  8000
+  11iv210ng:  8500
+  11iv22ng:   8500
+  8iv210ng:   7500
+  8iv22ng:    7500
+  8iScreen1:  112000
+  11iScreen1: 120000
   
-# cell and umi barcode base positions in barcode reads. The first element of the array is the cell
-# barcode range, while the second is the UMI barcode range.
-bc_structure: [1-16, 17-26]
+# cell and umi barcode base positions in barcode reads for each sample. the first element of the
+# array is the cell barcode range, while the second is the UMI barcode range. for screen samples the
+# i7 sample barcode was added to the cell barcode, to avoid barcode collisions because multiple 10X
+# lanes were multiplexed.
+bc_structure:
+  Sample10X:  [1-16, 17-26]
+  11iv210ng:  [1-16, 17-26]
+  11iv22ng:   [1-16, 17-26]
+  8iv210ng:   [1-16, 17-26]
+  8iv22ng:    [1-16, 17-26]
+  8iScreen1:  [1-24, 25-34]
+  11iScreen1: [1-24, 25-34]
 
 # alignment reference for each sample
 align_ref:
-  Sample10X: data/genome_reference
-  11iv210ng: data/tapseq_ref_validation
-  11iv22ng:  data/tapseq_ref_validation
-  8iv210ng:  data/tapseq_ref_validation
-  8iv22ng:   data/tapseq_ref_validation
+  Sample10X:  data/genome_reference
+  11iv210ng:  data/tapseq_ref_validation
+  11iv22ng:   data/tapseq_ref_validation
+  8iv210ng:   data/tapseq_ref_validation
+  8iv22ng:    data/tapseq_ref_validation
+  8iScreen1:  data/tapseq_ref_chr8_screen
+  11iScreen1: data/tapseq_ref_chr11_screen
+  
+# number of minimum molecules per CROP-seq vector to define a cell perturbed for a given vector
+perturbation_status:
+  min_txs:
+    Sample10X:  4
+    11iv210ng:  8
+    11iv22ng:   8
+    8iv210ng:   8
+    8iv22ng:    8
+    8iScreen1:  8
+    11iScreen1: 8
 
 # sample ids for validation and screen TAP-seq runs
 validation: [11iv210ng, 11iv22ng, 8iv210ng, 8iv22ng, Sample10X]
-screen:     
+screen:     [8iScreen1, 11iScreen1]
 
 ## PARAMETERS FOR INDIVIDUAL RULES =================================================================
 
@@ -109,14 +137,6 @@ umi_observations:
   
 extract_dge:
   tpt_threshold: 0.25
-
-perturbation_status:
-  min_txs:
-    Sample10X: 4
-    11iv210ng: 8
-    11iv22ng:  8
-    8iv210ng:  8
-    8iv22ng:   8
     
 # step 4: analysis ---------------------------------------------------------------------------------
 downsample:

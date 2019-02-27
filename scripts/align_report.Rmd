@@ -113,7 +113,8 @@ knitr::kable(metrics, col.names = "")
 <br>
 
 **Synthesis error**
-The most common detected errors are cell barcodes that did not undergo 12 rounds of splitting and
+The most common detected errors are cell barcodes that did not undergo
+`r sub(snakemake@params$bc_structure, pattern = ".+-", replacement = "")[1]` rounds of splitting and
 pooling, and are therefore shorter. This manifests itself by detected fixed Ts at the end of the UMI
 sequence (see Drop-seq Alignment Cookbook for more details). This histogram shows the number of
 cells with detected fixed Ts and the base positions where the errors are deteced.
