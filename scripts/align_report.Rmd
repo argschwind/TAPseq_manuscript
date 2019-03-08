@@ -86,53 +86,6 @@ plot_mapping_cats(mapping_cats = perc_reads, sample = snakemake@wildcards$sample
 
 ***
 
-# Barcode synthesis errors
-DetectBeadSynthesisErrors from Drop-seq tools scans barcodes for synthesis errors and tries to
-correct incomplete cell barcodes or discards them if this is not possible. For details on the method
-refer to the
-[Drop-seq Alignment Cookbook](http://mccarrolllab.org/wp-content/uploads/2016/03/Drop-seqAlignmentCookbookv1.2Jan2016.pdf).
-
-<br>
-
-**Summary of detected error types**
-```{r synt_error_stats}
-# read synthesis error summary data
-synt_error_summary <- read_synthesis_error(here(snakemake@input$synthesis_error))
-
-# transpose metrics data.frame for better layout in html output
-metrics <- t(synt_error_summary$metrics)
-
-# add ":" to rownames
-rownames(metrics) <- paste0(rownames(metrics), ":")
-
-# print metrics summary table in list format
-knitr::kable(metrics, col.names = "")
-```
-
-<br>
-<br>
-
-**Synthesis error**
-The most common detected errors are cell barcodes that did not undergo
-`r sub(snakemake@params$bc_structure, pattern = ".+-", replacement = "")[1]` rounds of splitting and
-pooling, and are therefore shorter. This manifests itself by detected fixed Ts at the end of the UMI
-sequence (see Drop-seq Alignment Cookbook for more details). This histogram shows the number of
-cells with detected fixed Ts and the base positions where the errors are deteced.
-
-<br>
-
-```{r error_position}
-# extract barcode lengths from bc_structure parameter
-bc_len <- as.integer(sub(snakemake@params$bc_structure, pattern = ".+-", replacement = ""))
-bc_len[2] <- bc_len[2] - bc_len[1]
-
-# plot histogram of detected fixed Ts in UMIs
-synthesis_error_hist(synt_error_summary, sample = snakemake@wildcards$sample,
-                     cell_bc_length = bc_len[1], mol_bc_length = bc_len[2])
-```
-
-***
-
 # Number of cells
 A crucial step of processing droplet based single-cell data is to estimate the number of sequenced
 cells. Here an estimate of the number of cell is derived based on the number of sequenced reads per

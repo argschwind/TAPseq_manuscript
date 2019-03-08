@@ -10,8 +10,8 @@ samples:
   8iScreen1:  /g/steinmetz/project/singcellTxn/CRISPRdrop/10X_RAW_DATA/k562_screen_Feb2019/8iScreen1
   11iScreen1: /g/steinmetz/project/singcellTxn/CRISPRdrop/10X_RAW_DATA/k562_screen_Feb2019/11iScreen1
 
-# rough A PRIORI estimate of the number of sequenced cells per sample. this is only used during
-# alignment not dge extraction
+# rough A PRIORI estimate of the number of sequenced cells per sample. this is only used for plots
+# in the alignment report and does not impact generated output data
 expect_cell_numbers:
   Sample10X:  10000
   11iv210ng:  8000
@@ -91,7 +91,7 @@ create_vector_ref:
     tapseq_ref_chr8_screen:  meta_data/cropseq_vectors_chr8_screen.fasta
     tapseq_ref_chr11_screen: meta_data/cropseq_vectors_chr11_screen.fasta
   vector_prefix:
-    "CROPseq_dCas9_DS"
+    "CROPseq_dCas9_DS_"
   
 create_genomedir:
   star_threads: 5

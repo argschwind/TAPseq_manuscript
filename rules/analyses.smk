@@ -2,7 +2,7 @@
 
 ### input, output and shell paths are all relative to the project directory ###
 
-# python functions to infer more complex input files -----------------------------------------------
+# python function to infer more complex input files
 
 # fastq read 2 (genome read)
 def fastq_read2(sample):
@@ -35,7 +35,7 @@ rule downsample:
 # calculate reads on target genes enrichment
 rule reads_on_target:
   input:
-    bam = ["data/" + sample + "/filt_gene_tagged_aligned.bam" for sample in config["validation"]],
+    bam = ["data/" + sample + "/gene_tagged_aligned.bam" for sample in config["validation"]],
     fastq = [fastq_read2(sample) for sample in config["validation"]],
     target_genes = "meta_data/target_genes_validation.csv"
   output:
@@ -74,3 +74,4 @@ rule downsampled_dge:
     "../envs/r_analyses.yml"
   script:
     "../scripts/downsampled_dge.Rmd"
+

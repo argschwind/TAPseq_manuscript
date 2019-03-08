@@ -259,7 +259,7 @@ rule tag_with_gene_exon:
     mapped_bam = "data/{sample}/merged_aligned.bam",
     annot = lambda wildcards: config["align_ref"][wildcards.sample] + "/cropseq_ref.refFlat"
   output:
-    temp("data/{sample}/gene_tagged_aligned.bam")
+    protected("data/{sample}/gene_tagged_aligned.bam")
   log:
     "data/{sample}/logs/tag_with_gene_exon.log"
   conda:
@@ -271,45 +271,27 @@ rule tag_with_gene_exon:
     "ANNOTATIONS_FILE={input.annot} "
     "TAG=GE "
     "2> {log}"
-
-# cell barcode synthesis errors
-rule bead_synthesis_error:
+    
+# create index file for final bam file
+rule create_bam_index:
   input:
     "data/{sample}/gene_tagged_aligned.bam"
   output:
-    bam = protected("data/{sample}/filt_gene_tagged_aligned.bam"),
-    summary = "data/{sample}/bead_synthesis_error_summary.txt",
-    detail = "data/{sample}/bead_synthesis_error_detail.txt"
+    "data/{sample}/gene_tagged_aligned.bai"
   log:
-    "data/{sample}/logs/filter_synthesis_error.log"
-  params:
-    num_bcs = lambda wildcards: config["expect_cell_numbers"][wildcards.sample] * 2,
-    min_umis_per_cell = config["bead_synthesis_error"]["min_umis_per_cell"],
-    max_num_errors = config["bead_synthesis_error"]["max_num_errors"],
-    read_mq = config["bead_synthesis_error"]["read_mq"],
-    primer_sequence = config["bead_synthesis_error"]["primer_sequence"],
-    edit_distance = config["bead_synthesis_error"]["edit_distance"]
+    "data/{sample}/logs/create_bam_index.log"
   conda:
     "../envs/dropseq_tools.yml"
   shell:
-    "DetectBeadSynthesisErrors "
+    "picard BuildBamIndex "
     "INPUT={input} "
-    "OUTPUT={output.bam} "
-    "NUM_BARCODES={params.num_bcs} "
-    "SUMMARY={output.summary} "
-    "OUTPUT_STATS={output.detail} "
-    "MIN_UMIS_PER_CELL={params.min_umis_per_cell} "
-    "MAX_NUM_ERRORS={params.max_num_errors} "
-    "READ_MQ={params.read_mq} "
-    "PRIMER_SEQUENCE={params.primer_sequence} "
-    "EDIT_DISTANCE={params.edit_distance} "
-    "CREATE_INDEX=true "
+    "OUTPUT={output} "
     "2> {log}"
 
 # calculate reads per cell barcode
 rule reads_per_cell:
   input:
-    "data/{sample}/filt_gene_tagged_aligned.bam"
+    "data/{sample}/gene_tagged_aligned.bam"
   output:
     "data/{sample}/reads_per_cell_barcode.txt"
   params:
@@ -334,7 +316,6 @@ rule align_report:
     star_smry = "data/{sample}/star.Log.final.out",
     adapt_trim = "data/{sample}/adapter_trimming_report.txt",
     polyA_trim = "data/{sample}/polyA_trimming_report.txt",
-    synthesis_error = "data/{sample}/bead_synthesis_error_summary.txt",
     reads_per_cell = "data/{sample}/reads_per_cell_barcode.txt"
   output:
     "results/alignment/{sample}_align_report.html"

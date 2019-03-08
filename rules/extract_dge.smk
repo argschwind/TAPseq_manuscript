@@ -7,7 +7,7 @@
 # count UMI observations per cell barcode and gene tag
 rule umi_observations:
   input:
-    "data/{sample}/filt_gene_tagged_aligned.bam"
+    "data/{sample}/gene_tagged_aligned.bam"
   output:
     "data/{sample}/umi_observations.txt"
   log:
