@@ -17,6 +17,24 @@ import numpy as np
 def eprint(*args, **kwargs):
   print(*args, file = sys.stderr, **kwargs)
   
+# filter for cell barcodes on whitelist
+def filter_cell_barcodes(umi_obs, whitelist):
+  
+  # get umi observations on whitelist
+  bc_filter = umi_obs['Cell Barcode'].isin(whitelist)
+  filt_umi_obs = umi_obs[bc_filter]
+  
+  # get number of filtered out reads and barcodes
+  n_filt_bc = len(umi_obs[~bc_filter]['Cell Barcode'].unique().tolist())
+  n_filt_reads = umi_obs[~bc_filter]['Num_Obs'].sum()
+  perc_filt_reads = n_filt_reads / umi_obs['Num_Obs'].sum() * 100
+  
+  # report filtered barcodes and reads to stderr
+  eprint(' Removed ' + str(n_filt_reads) + ' reads (' + str(round(perc_filt_reads, 3)) + '%) ' +
+         'from ' + str(n_filt_bc) + ' cell barcodes')
+  
+  return(filt_umi_obs)
+  
 # sample a specified number of total genic reads from the umi counts
 def sample_reads(umi_obs, n, seed = None):
   
@@ -75,7 +93,7 @@ def filter_tpt(umi_tpt, tpt_threshold):
   filter_logical = umi_tpt['tpt'] >= tpt_threshold
   umi_filt = umi_tpt[filter_logical]
 
-  eprint('  Removing ' + str(np.round(100 * (1 - np.mean(filter_logical)), 3)) + '% of molecules')
+  eprint('  Removed ' + str(np.round(100 * (1 - np.mean(filter_logical)), 3)) + '% of transcripts')
 
   return(umi_filt)
   
@@ -132,8 +150,12 @@ if __name__ == '__main__':
   parser.add_argument('-i', '--inputfile', help = 'File containing UMI observations as produced by \
     GatherMolecularBarcodeDistributionByGene from Drop-seq tools.', required = True)
   parser.add_argument('-o', '--outputfile', help = 'Output file for filtered digital gene \
-    expression matrix. TPT histogram and DGE summary files will be written in the same directory',
+    expression matrix. TPT histogram and DGE summary files will be written into the same directory',
     required = True)
+  parser.add_argument('-w', '--whitelist', help = 'File containing possible true cell barcodes \
+    without header and one cell barcode per line. If provided only cell barcodes on this \
+    whitelist will be considered. Default = None, which turns cell barcode filtering off.',
+    default = None)
   parser.add_argument('--tpt_threshold', help = 'Minimum transcript per transcript value for \
     gene-cell-umi combinations to pass chimeric reads filtering. Default = 0, which does not \
     remove any reads', type = float, default = 0.0)
@@ -144,9 +166,16 @@ if __name__ == '__main__':
 
   args = parser.parse_args()
 
-  # read input file
+  # read umi observations input file
   eprint('Reading input file...')
   umi_obs = pd.read_csv(args.inputfile, sep = '\t')
+  
+  # filter for cell barcodes on whitelist (if whitelist file is provided)
+  if args.whitelist:
+    eprint('Filtering for cell barcodes on provided whitelist...')
+    with open(args.whitelist) as whitelist_file:
+      whitelist = whitelist_file.read().splitlines()
+    umi_obs = filter_cell_barcodes(umi_obs, whitelist)
   
   # downsample total genic reads if specified
   if args.sample:
@@ -168,8 +197,8 @@ if __name__ == '__main__':
   hist_file = os.path.splitext(args.outputfile)[0] + '_tpt_histogram.txt'
   tpt_hist.to_csv(hist_file, sep = '\t', index = False)
 
-  # filter molecules based on tbt
-  eprint('Filtering for chimeric reads...')
+  # filter transcripts based on minimum tbt
+  eprint('Filtering for chimeric reads (min TPT = ' + str(args.tpt_threshold) + ')...')
   umi_filt = filter_tpt(umi_tpt, tpt_threshold = args.tpt_threshold)
   
   # calculate dge summary statistics

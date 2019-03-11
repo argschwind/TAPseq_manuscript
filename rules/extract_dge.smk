@@ -2,6 +2,17 @@
 
 ### input, output and shell paths are all relative to the project directory ###
 
+# python function(s) to infer more complex input files ---------------------------------------------
+
+# get cell barcode whitelist file for a given sample
+def get_cbc_whitelist(wildcards):
+  sample = wildcards.sample
+  if sample in config["screen"]:
+    whitelist = "meta_data/screen_10x_bc_whitelist_737k_201608.txt.gz"
+  else:
+    whitelist = "meta_data/10x_bc_whitelist_737k_201608.txt"
+  return whitelist
+
 # workflow rules -----------------------------------------------------------------------------------
 
 # count UMI observations per cell barcode and gene tag
@@ -34,7 +45,8 @@ rule umi_observations:
 # extract dge with and filter for chimeric reads
 rule extract_dge:
   input:
-    "data/{sample}/umi_observations.txt"
+    umi_obs = "data/{sample}/umi_observations.txt",
+    whitelist = get_cbc_whitelist
   output:
     dge = "data/{sample}/dge.txt",
     dge_stats = "data/{sample}/dge_summary.txt",
@@ -46,7 +58,7 @@ rule extract_dge:
   conda:
     "../envs/dropseq_tools.yml"
   shell:
-    "python scripts/extract_dge.py -i {input} -o {output.dge} "
+    "python scripts/extract_dge.py -i {input.umi_obs} -o {output.dge} -w {input.whitelist} "
     "--tpt_threshold {params.tpt_threshold} 2> {log}"
     
 # infer perturbation status of each cell

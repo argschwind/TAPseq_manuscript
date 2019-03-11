@@ -22,8 +22,7 @@ library(plotly)
 ```
 
 This report summarizes the results from the Digital Gene Expression (DGE) extraction for sample
-**`r snakemake@wildcards$sample`**, for which expression data for
-**`r snakemake@config$dge_ncells[snakemake@wildcards$sample]` cells** were extracted.
+**`r snakemake@wildcards$sample`**.
 
 # Chimeric reads filtering
 To assess chimeric reads a measurement called "Transcripts-per-transcript (TPT)" proposed by
@@ -66,11 +65,16 @@ to be the result of chimeric read events and were filtered out during DGE extrac
 # read dge summary statistics
 dge_stats <- read.table(here(snakemake@input$dge_stats), header = TRUE, stringsAsFactors = FALSE)
 
-
 # sort dge_stats according to number of detected transcripts and transform cell barcode into factor
 dge_stats <- arrange(dge_stats, desc(transcripts)) %>%
   mutate(cell_barcode = forcats::fct_inorder(cell_barcode))
+
+# calculate number of cell barcodes lost because of cell barcode whitelist filtering (for text only)
+ncells <- snakemake@config$dge_ncells[[snakemake@wildcards$sample]]
+filt_cells <- ncells - nrow(dge_stats)
 ```
+Expression data for `r ncells` cells were extracted and after filtering for cell barcodes on
+whitelist and chimeric reads filtering, a total of **`r filt_cells` cells** remain in the DGE data.
 
 ## Summary stats
 These plots show the number of genic reads, transcripts (UMIs) and genes detected per cell.
@@ -267,7 +271,7 @@ p <- ggplot(cells_per_pert,
   theme_bw()
 
 # print plot with layout appropriate for number of perturbations
-if (nrow(cells_per_pert) <= 20) {
+if (nrow(cells_per_pert) <= 30) {
   p + coord_flip()
 }else{
   p + theme(axis.text.x=element_blank(), axis.ticks.x=element_blank(), panel.grid = element_blank())

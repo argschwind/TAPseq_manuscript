@@ -2,7 +2,7 @@
 
 ### input, output and shell paths are all relative to the project directory ###
 
-# define input function ----------------------------------------------------------------------------
+# python function(s) to infer more complex input files ---------------------------------------------
 
 import glob
 
