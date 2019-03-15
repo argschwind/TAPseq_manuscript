@@ -18,7 +18,8 @@ rule all:
    align = expand("results/alignment/{sample}_align_report.html", sample = config["samples"]),
    dge = expand("results/dge/{sample}_dge_report.html", sample = config["samples"]),
    analyses = ["results/tapseq_vs_cropseq.html",
-               "results/downsampled_dge.html"]
+               "results/downsampled_dge.html",
+               "results/downsampled_target_reads.html"]
 
 # functions to run workflow only partially ---------------------------------------------------------
 

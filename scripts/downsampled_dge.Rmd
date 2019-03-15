@@ -36,9 +36,6 @@ target_genes <- read.csv(here(snakemake@input$target_genes), stringsAsFactors = 
 # simplify panel information
 target_genes <- mutate(target_genes, panel = sub("_.+", "", panel))
 
-# load 10x cell barcode whitelist
-whitelist_10x_cbc <- readLines(here(snakemake@input$whitelist))
-
 # perturbation status files
 pert_files <- here(snakemake@input$pert_status)
 names(pert_files) <- basename(dirname(pert_files))
@@ -61,7 +58,7 @@ known_enh <- target_genes %>%
   pull(gene)
 
 # list of perturbations and their target genes
-perturbations <- list(eGATA1 = "GATA1", eMYC = "MYC", eZFPM2 = "ZFPM2",
+known_targets <- list(eGATA1 = "GATA1", eMYC = "MYC", eZFPM2 = "ZFPM2",
                       eHS2 = c("HBB", "HBD", "HBE1", "HBG1", "HBG2"))
 
 # samples for chr11 and chr8 panels
@@ -75,34 +72,27 @@ design <- data.frame(sample = c(chr11_samples, chr8_samples),
 ```
 
 ```{r perturbations}
-# transform perturbation status matrices to long format and convert to long format, transform  into
-# one data.frame
+# convert perturbation status matrices into long format, make one data.frame and only retain cells
+# with at least one detected perturbation
 pert_status <- pert_status %>%
-  lapply(FUN = gather, key = "vector", value = "pert", -cell_barcode) %>%
-  bind_rows(.id = "sample")
+  lapply(FUN = gather, key = "cell_barcode", value = "pert", -VECTOR) %>%
+  bind_rows(.id = "sample") %>%
+  filter(pert > 0)
 
-# split vector id into vector, perturbation target and gRNA id
+# convert vector id into vector id, target and grna, and merge perturbations per target (enhancer)
 pert_status <- pert_status %>%
-  mutate(vector = sub("SCR", "SCR_", vector)) %>%  # add "_" into SCR gRNA ids
-  separate(vector, sep = "_", into = c("vector", "target", "grna"))
-
-# only retain targets to merge multiple gRNAs targeting the same enhancer and only retain data on
-# successful perturbations
-pert_status <- pert_status %>%
-  select(sample, cell_barcode, target, pert) %>%
-  filter(pert == 1) %>%
-  group_by(sample, cell_barcode, target) %>%
-  summarize(pert = sum(pert))
+  mutate(VECTOR = sub("SCR", "SCR_", VECTOR)) %>%  # add "_" into SCR gRNA ids
+  separate(VECTOR, sep = "_", into = c("vector", "target", "grna")) %>%
+  count(sample, cell_barcode, target) %>%
+  rename(pert = n)
 ```
 
 ```{r prepareDGE}
-# filter for TAP-seq target genes, convert into one data.frame, and retain only cell barcodes from
-# the 10x cell barcode white list
+# filter for TAP-seq target genes and convert into one data.frame
 dge_filt <- dge %>%
   lapply(FUN = filter, GENE %in% target_genes$gene) %>%
   lapply(., FUN = gather, key = "cell_barcode", value = "txs", -GENE) %>%
   bind_rows(.id = "sample") %>%
-  filter(cell_barcode %in% whitelist_10x_cbc) %>%
   rename("gene" = GENE)
 
 # add experimental panel information for each sample and only retain genes that were assessed in
@@ -123,8 +113,12 @@ dge_pert <- dge_panels %>%
   mutate(method = if_else(sample == "Sample10X", true = "cropseq", false = "tapseq"))
 ```
 
+***
+
 # Downsample cell numbers
-Different number of cells are repeatidly drawn from the genic reads doensampled dge data.
+Different number of cells are repeatidly drawn (1000 times per size) from the genic reads
+downsampled dge data. The LFC between perturbed cells and scrambled control cells is calculated for
+every drawn cell sample.
 ```{r dsFunction}
 # function to repeatedly sample across different sampling sizes and calculate average gene
 # expression for each drawn sample of cells
@@ -168,7 +162,7 @@ sizes <- seq(from = 5, to = 100, by = 5)
 times <- 1000
 
 # calculate downsampled average gene expression across different number of cells for both panels
-set.seed(20190705)
+set.seed(20190205)
 ds_avg_genex <- dge_pert %>%
   group_by(exp, method, target) %>%
   do(sample_cells_avg_genex(., sizes = sizes, times = times)) %>%
@@ -184,9 +178,10 @@ lfc <- ds_avg_genex %>%
   mutate(lfc = log2(avg_genex) - log2(scr_ctrl))
 ```
 
-# LFC
+## LFC
 The log fold changes between perturbed and control cells is plotted for different target genes
 across sampling sizes and methods (TAP-seq vs CROP-seq).
+
 ```{r plotLFC}
 # calculate mean, median and 95% intervals for each experiment, perturbation, sampling size and gene
 lfc_stats <- lfc %>%
@@ -199,7 +194,7 @@ lfc_stats <- lfc %>%
 # only retain lfc data on target genes in perturbed cells
 lfc_stats_targets <- lfc_stats %>%
   group_by(target) %>%
-  filter(gene %in% unlist(perturbations[target])) %>%
+  filter(gene %in% unlist(known_targets[target])) %>%
   ungroup()
 
 # add average gene expression in whole Tx CROP-seq
@@ -226,9 +221,10 @@ ggplot(lfc_stats_plot,
   
 ```
 
-# Percentage negative
+## Percentage negative
 The percentage of samples yielding a negative LFC is plotted for selected target genes and across
 sampling sizes and methods.
+
 ```{r plotSig}
 # for each sampling size, calculate the percentage of draws in which each gene had a negative lfc
 neg_perc <- lfc %>%
@@ -238,7 +234,7 @@ neg_perc <- lfc %>%
 # only retain data on target genes in perturbed cells
 neg_perc_ctrl <- neg_perc %>%
   group_by(target) %>%
-  filter(gene %in% unlist(perturbations[target]))
+  filter(gene %in% unlist(known_targets[target]))
 
 # only retain results on genes, where we see a CRISPR effect up to 80 cells
 neg_perc_ctrl <- neg_perc_ctrl %>%
@@ -319,12 +315,12 @@ plot_lfc <- function(lfc_stats, perturbation, target_genes){
 }
 
 # create plots for chr11 and chr8 panels
-plots_chr11 <- lapply(names(perturbations), FUN = function(x){
-  plot_lfc(filter(lfc_stats, panel == "chr11"), perturbation = x, target_genes = perturbations[[x]])
+plots_chr11 <- lapply(names(known_targets), FUN = function(x){
+  plot_lfc(filter(lfc_stats, panel == "chr11"), perturbation = x, target_genes = known_targets[[x]])
 })
 
-plots_chr8 <- lapply(names(perturbations), FUN = function(x){
-  plot_lfc(filter(lfc_stats, panel == "chr8"), perturbation = x, target_genes = perturbations[[x]])
+plots_chr8 <- lapply(names(known_targets), FUN = function(x){
+  plot_lfc(filter(lfc_stats, panel == "chr8"), perturbation = x, target_genes = known_targets[[x]])
 })
 ```
 

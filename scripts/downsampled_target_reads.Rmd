@@ -1,0 +1,458 @@
+---
+title: "Downsample to fixed number of reads on target genes per cell"
+author: "Andreas Gschwind"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+params:
+  rmd: "downsampled_target_reads.Rmd"
+output:
+  bookdown::html_document2:
+    toc: yes
+---
+
+# Goal
+DGE data is downsampled to a fixed number of reads on target genes per cell.
+```{css echo=FALSE}
+/* Define a margin before every image element */
+img {
+  margin-top: 3em;
+}
+```
+
+```{r setup, include=FALSE}
+# set global chunk options
+knitr::opts_chunk$set(echo = FALSE)
+
+# attach required packages
+library(tidyverse)
+library(gridExtra)
+library(here)
+```
+
+```{r prepData}
+# load tap-seq target genes
+target_genes <- read.csv(here(snakemake@input$target_genes), stringsAsFactors = FALSE)
+
+# load cell barcode whitelist
+cbc_whitelist <- readLines(here(snakemake@input$whitelist))
+
+# perturbation status files
+pert_files <- here(snakemake@input$pert_status)
+names(pert_files) <- basename(dirname(pert_files))
+
+# load perturbation status files
+pert_status <- lapply(pert_files, FUN = read.table, header = TRUE, stringsAsFactors = FALSE)
+
+# umi observation input files
+umi_obs_files <- here(snakemake@input$umi_obs)
+names(umi_obs_files) <- basename(dirname(umi_obs_files))
+
+# load umi observation files
+umi_obs <- lapply(umi_obs_files, FUN = read.table, header = TRUE, stringsAsFactors = FALSE,
+                  sep = "\t")
+
+# samples for chr11 and chr8 panels
+chr11_samples <- c("11iv210ng", "11iv22ng", "Sample10X")
+chr8_samples <- c("8iv210ng", "8iv22ng", "Sample10X")
+
+# chr8 and chr11 umi observations
+umi_obs_chr8  <- umi_obs[chr8_samples]
+umi_obs_chr11 <- umi_obs[chr11_samples]
+```
+
+```{r pertCells}
+# convert perturbation status matrices into long format, make one data.frame, and only retain cells
+# with at least one detected perturbation and are on cell barcode whitelist
+pert_status <- pert_status %>%
+  lapply(FUN = gather, key = "cell_barcode", value = "pert", -VECTOR) %>%
+  bind_rows(.id = "sample") %>%
+  filter(pert > 0, cell_barcode %in% cbc_whitelist)
+
+# convert vector id into vector id, target and grna, and merge perturbations per target (enhancer)
+pert_status <- pert_status %>%
+  mutate(VECTOR = sub("SCR", "SCR_", VECTOR)) %>%  # add "_" into SCR gRNA ids
+  separate(VECTOR, sep = "_", into = c("vector", "target", "grna")) %>%
+  count(sample, cell_barcode, target) %>%
+  rename(pert = n)
+
+# extract cell ids of perturbed cells
+perturbed_cells <- pert_status %>%
+  select(sample, cell_barcode) %>%
+  unique()
+```
+
+***
+
+# Reads on target genes
+Cells with detected perturbations are selected and only dge data on these will be used. The number
+of genic reads mapping to target genes in these cells is calculated for samples of both chromosome 8
+and 11 target gene panels.
+
+```{r, fig.height=6, fig.width=10}
+# get chr8 target genes
+chr8_targets <- target_genes %>%
+  filter(panel %in% c("chr8_myc", "chr8_zfpm2") | screen == "validation") %>%
+  pull(gene)
+
+# get chr8 target genes that were detected in all experiments
+expr_chr8_targets <- umi_obs_chr8 %>%
+  sapply(FUN = function(x) structure(chr8_targets %in% x$Gene, names = chr8_targets)) %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "gene") %>%
+  filter(rowSums(.[, -1]) == 3) %>%
+  pull(gene)
+
+# get umi observations for these target genes, make one data.frame and filter for cells with
+# detected perturbations
+umi_obs_chr8 <- umi_obs_chr8 %>%
+  lapply(FUN = filter, Gene %in% expr_chr8_targets) %>%
+  bind_rows(.id = "sample") %>%
+  rename(cell_barcode = Cell.Barcode, gene = Gene, umi = Molecular_Barcode, num_obs = Num_Obs) %>%
+  inner_join(perturbed_cells, by = c("sample", "cell_barcode"))  # filter on two columns using join
+
+# count number of reads on target per cell
+genic_reads_chr8 <- umi_obs_chr8 %>%
+  group_by(sample, cell_barcode) %>%
+  summarize(genic_reads = sum(num_obs)) %>%
+  ungroup()
+
+# plot number of genic reads on target genes per cell
+p1 <- ggplot(genic_reads_chr8, aes(x = sample, y = genic_reads, color = sample)) +
+  geom_jitter(alpha = 0.1, width = 0.3) +
+  geom_boxplot(notch = TRUE, fill = NA, color = "black", outlier.colour = NA) +
+  geom_hline(yintercept = 200, color = "gray42", lty = "dashed") +
+  labs(title = "Chr8 target reads per cell", x = "Sample", y = "Reads on target genes per cell") +
+  scale_y_log10() +
+  theme_bw() +
+  theme(legend.position = "none")
+
+# count number of cells per perturbation with 200 or more reads on target genes
+cells_200 <- genic_reads_chr8 %>%
+  filter(genic_reads >= 200) %>%
+  left_join(pert_status, by = c("sample", "cell_barcode")) %>%
+  count(sample, target) %>%
+  rename(cells = n)
+
+# plot number of cells per perurbation per sample (cells with multiple perturbations get duplicated)
+p2 <- ggplot(cells_200, aes(x = sample, y = cells, fill = target)) +
+  geom_bar(stat = "identity") +
+  labs(x = "Sample", y = "Cells", title = "Chr8 cells >= 200 target reads", fill = "Target") +
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ 
+# print plots
+grid.arrange(p1, p2, layout_matrix = matrix(c(1, 1, 2), byrow = TRUE, ncol = 3))
+```
+
+```{r, fig.height=6, fig.width=10}
+# get chr11 target genes
+chr11_targets <- target_genes %>%
+  filter(panel == "chr11_hs2" | screen == "validation") %>%
+  pull(gene)
+
+# get chr11 target genes that were detected in all experiments
+expr_chr11_targets <- umi_obs_chr11 %>%
+  sapply(FUN = function(x) structure(chr11_targets %in% x$Gene, names = chr11_targets)) %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "gene") %>%
+  filter(rowSums(.[, -1]) == 3) %>%
+  pull(gene)
+
+# get umi observations for these target genes, filter for cells with detected perturbations, and
+# make one data.frame
+umi_obs_chr11 <- umi_obs_chr11 %>%
+  lapply(FUN = filter, Gene %in% expr_chr11_targets) %>%
+  bind_rows(.id = "sample") %>%
+  rename(cell_barcode = Cell.Barcode, gene = Gene, umi = Molecular_Barcode, num_obs = Num_Obs) %>%
+  inner_join(perturbed_cells, by = c("sample", "cell_barcode"))  # filter on two columns using join
+
+# count number of reads on target per cell
+genic_reads_chr11 <- umi_obs_chr11 %>%
+  group_by(sample, cell_barcode) %>%
+  summarize(genic_reads = sum(num_obs)) %>%
+  ungroup()
+
+# plot number of genic reads on target genes per cell
+p1 <- ggplot(genic_reads_chr11, aes(x = sample, y = genic_reads, color = sample)) +
+  geom_jitter(alpha = 0.1, width = 0.3) +
+  geom_boxplot(notch = TRUE, fill = NA, color = "black", outlier.colour = NA) +
+  geom_hline(yintercept = 200, color = "gray42", lty = "dashed") +
+  labs(title = "Chr11 target reads per cell", x = "Sample", y = "Reads on target genes per cell") +
+  scale_y_log10() +
+  theme_bw() +
+  theme(legend.position = "none")
+
+# count number of cells per perturbation with 200 or more reads on target genes
+cells_200 <- genic_reads_chr11 %>%
+  filter(genic_reads >= 200) %>%
+  left_join(pert_status, by = c("sample", "cell_barcode")) %>%
+  count(sample, target) %>%
+  rename(cells = n)
+
+# plot number of cells per perurbation per sample (cells with multiple perturbations get duplicated)
+p2 <- ggplot(cells_200, aes(x = sample, y = cells, fill = target)) +
+  geom_bar(stat = "identity") +
+  labs(x = "Sample", y = "Cells", title = "Chr11 cells >= 200 target reads", fill = "Target") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ 
+# print plots
+grid.arrange(p1, p2, layout_matrix = matrix(c(1, 1, 2), byrow = TRUE, ncol = 3))
+```
+
+***
+
+# Downsample DGE
+Every perturbed cell with at least 200 reads on target genes is downsampled to 200 reads on target
+genes using the UMI observation data. The downsampled UMI observations are then used to extract DGE
+data (count the number of UMIs per cell-gene combination).
+```{r dgeDsFunctions}
+# function to downsample umi_obs for a specifc number of genic reads
+downsample_reads <- function(x, reads) {
+  
+  # "uncount" umi_observations so that each read is a row by repeating each line number-of-reads
+  # times (i.e. num_obs)
+  reps <- rep(seq_len(nrow(x)), times = x$num_obs)
+  x_reads <- x[reps, -5]
+  
+  # randomly sample reads
+  sampled_reads <- x_reads %>%
+    group_by(panel, sample, cell_barcode) %>%
+    sample_n(size = reads, replace = FALSE)
+    
+  # count observations of each sample-cell-umi combination
+  sampled_umi_obs <- sampled_reads %>%
+    group_by(panel, sample, cell_barcode, gene, umi) %>%
+    summarize(num_obs = n()) %>%
+    ungroup()
+  
+}
+
+# extract dge data for each sample by calculating number of umis per gene and  cell
+extract_dge <- function(x){
+  x %>%
+    count(panel, sample, cell_barcode, gene) %>%
+    rename(txs = n)
+}
+```
+
+```{r downsampleDGE}
+# cells with >= 200 reads on target genes
+cells_chr8 <- genic_reads_chr8 %>%
+  filter(genic_reads >= 200) %>%
+  select(-genic_reads)
+
+cells_chr11 <- genic_reads_chr11 %>%
+  filter(genic_reads >= 200) %>%
+  select(-genic_reads)
+
+# get umi observations for these cells
+umi_obs_chr8_filt <- left_join(cells_chr8, umi_obs_chr8, by = c("sample", "cell_barcode"))
+umi_obs_chr11_filt <- left_join(cells_chr11, umi_obs_chr11, by = c("sample", "cell_barcode"))
+
+# add variable for primer panel and combine chr8 and chr11 data to facilitate downsampling
+umi_obs_chr8_filt$panel  <- "chr8"
+umi_obs_chr11_filt$panel <- "chr11"
+umi_obs_filt <- bind_rows(umi_obs_chr8_filt, umi_obs_chr11_filt)
+
+# downsample genic reads to 200 per cell
+set.seed(20190306)
+ds_umi_obs <- downsample_reads(x = umi_obs_filt, reads = 200)
+ds_dge <- extract_dge(ds_umi_obs)
+```
+
+```{r DGEmatrices}
+# function to create DGE matrix from long format
+create_dge_matrix <- function(dge_long) {
+  dge_long %>%
+    select(cell_barcode, gene, txs) %>%
+    spread(key = cell_barcode, value = txs, fill = 0) %>%
+    as.data.frame(stringsAsFactors == FALSE) %>%
+    column_to_rownames(var = "gene") %>%
+    as.matrix()
+}
+
+# create dge matrices
+dge_matrices <- ds_dge %>%
+  split(., f = list(.$panel, .$sample), drop = TRUE) %>%
+  map(.f = create_dge_matrix)
+
+# save as .rds file
+saveRDS(dge_matrices, file = here("data/downsampled_reads_on_target.rds"))
+```
+
+***
+
+# Downsample cell numbers
+Different number of cells are repeatidly drawn from the genic reads downsampled dge data. For each
+drawn cell sample the log fold change (LFC) between perturbed and scrambled control cells is
+calculated.
+```{r experimentalDesign}
+# known enhancer targets for validation
+known_enh <- target_genes %>%
+  filter(screen == "validation") %>%
+  pull(gene)
+
+# list of perturbations and their target genes
+known_targets <- list(eGATA1 = "GATA1", eMYC = "MYC", eZFPM2 = "ZFPM2",
+                      eHS2 = c("HBB", "HBD", "HBE1", "HBG1", "HBG2"))
+```
+
+```{r dsFunction}
+# function to repeatedly sample across different sampling sizes and calculate average gene
+# expression for each drawn sample of cells
+sample_cells_avg_genex <- function(x, sizes, times, pseudo_count = 1){
+  
+  # set names so that sampling output will include sampling size
+  names(sizes) <- sizes
+  
+  # add pseudo count and convert x to wide format for easier sampling (one unique cell per row)
+  x <- x %>%
+    mutate(txs = txs + pseudo_count) %>%
+    spread(key = "gene", value = "txs", fill = pseudo_count)  # with pseudo count for any implied 0s
+  
+  # sample cells and calculate average gene expression
+  sampled_avg <- lapply(sizes, FUN = function(size, x, times) {
+    output <- replicate(times, sample_avg_genex(x, size = size), simplify = TRUE)
+    colnames(output) <- paste0("i", seq_len(times))
+    rownames_to_column(as.data.frame(output), var = "gene")
+  }, x = x, times = times)
+  
+  # convert to one large data.frame
+  bind_rows(sampled_avg, .id = "size")
+  
+}
+
+# function to sample a dge data.frame and calculate average gene expression
+sample_avg_genex <- function(x, size){
+  
+  # sample rows
+  rows <- sample(seq_len(nrow(x)), size = size, replace = TRUE)
+  
+  # calculate avgerage gene expression
+  colMeans(x[rows, -c(1:6)])
+
+}
+```
+
+```{r dsCells}
+# combine perturbations and downsampled dge data. if a cell is perturbed for 2 different targets,
+# the dge rows will be duplicated. finally add variable for the applied method (cropseq or tapseq)
+dge_pert <- ds_dge %>%
+  left_join(pert_status, by = c("sample", "cell_barcode")) %>%
+  mutate(method = if_else(sample == "Sample10X", true = "cropseq", false = "tapseq"))
+
+# desired sampling sizes and replicates per sampling size
+sizes <- seq(from = 5, to = 100, by = 5)
+times <- 100
+
+# calculate downsampled average gene expression across different number of cells for both panels
+set.seed(20190306)
+ds_avg_genex <- dge_pert %>%
+  group_by(panel, method, target) %>%
+  do(sample_cells_avg_genex(., sizes = sizes, times = times)) %>%
+  mutate(size = as.integer(size))
+
+# reformat data, so that each row contains one perturbation and the scrampled control expression and
+# calculate log-fold change
+lfc <- ds_avg_genex %>%
+  gather(key = "iteration", value = "avg_genex", -c(panel, method, target, size, gene)) %>%
+  spread(key = "target", value = "avg_genex", fill = 1) %>%
+  gather(key = "target", value = "avg_genex", -c(panel, method, size, gene, iteration, SCR)) %>%
+  rename("scr_ctrl" = SCR) %>%
+  mutate(lfc = log2(avg_genex) - log2(scr_ctrl))
+```
+
+## LFC
+The log fold changes between perturbed and control cells is plotted for different target genes
+across sampling sizes and methods (TAP-seq vs CROP-seq).
+```{r plotLFC}
+# calculate mean, median and 95% intervals for each experiment, perturbation, sampling size and gene
+lfc_stats <- lfc %>%
+  group_by(panel, method, target, size, gene) %>%
+  summarize(avg_lfc = mean(lfc),
+            med_lfc = median(lfc),
+            lower_95 = quantile(lfc, 0.025),
+            upper_95 = quantile(lfc, 0.975))
+
+# only retain lfc data on target genes in perturbed cells
+lfc_stats_targets <- lfc_stats %>%
+  group_by(target) %>%
+  filter(gene %in% unlist(known_targets[target])) %>%
+  ungroup()
+
+# add average gene expression in whole Tx CROP-seq
+lfc_stats_targets <- ds_dge %>%
+  filter(sample == "Sample10X", gene %in% unique(lfc_stats_targets$gene)) %>%
+  group_by(gene) %>%
+  summarize(avg_wholeTx = mean(txs)) %>%
+  right_join(lfc_stats_targets, by = "gene")
+
+# choose sampling sizes for plot
+lfc_stats_plot <- lfc_stats_targets %>%
+  filter(gene %in% c("GATA1", "ZFPM2", "HBE1", "HBG1", "HBG2")) %>%
+  filter(size %in% c(25, 50, 80))
+
+ggplot(lfc_stats_plot,
+       aes(x = factor(round(avg_wholeTx, digits = 2)), y = med_lfc, color = gene, lty = method)) +
+  facet_grid(panel~size) +
+  geom_hline(yintercept = 0) +
+  geom_errorbar(aes(ymin = lower_95, ymax = upper_95), width = 0.5, size = 0.6,
+                position = position_dodge(width = 0.6)) +
+  geom_point(shape = "-", size = 9, position = position_dodge(width = 0.6)) +
+  labs(x = "Average CROP-seq gene expression", y = "Median LFC") +
+  theme_bw()
+```
+
+## Percentage negative
+The percentage of samples yielding a negative LFC is plotted for selected target genes and across
+sampling sizes and methods.
+```{r plotSig}
+# for each sampling size, calculate the percentage of draws in which each gene had a negative lfc
+neg_perc <- lfc %>%
+  group_by(panel, method, target, size, gene) %>%
+  summarize(perc_neg = mean(lfc < 0))
+
+# only retain data on target genes in perturbed cells
+neg_perc_ctrl <- neg_perc %>%
+  group_by(target) %>%
+  filter(gene %in% unlist(known_targets[target]))
+
+# only retain results on genes, where we see a CRISPR effect up to 80 cells
+neg_perc_ctrl <- neg_perc_ctrl %>%
+  filter(gene %in% c("GATA1", "ZFPM2", "HBE1", "HBG1", "HBG2")) %>%
+  filter(size <= 60)
+
+# get expression data for control genes in wholeTx CROP-seq (only detected expression!)
+dge_ctrls <- ds_dge %>%
+  filter(sample == "Sample10X", gene %in% unique(neg_perc_ctrl$gene))
+
+# calculate average expression of each control gene and add to neg_perc_ctrl
+neg_perc_ctrl <- dge_ctrls %>%
+  group_by(gene) %>%
+  summarize(avg_txs = mean(txs)) %>%
+  right_join(neg_perc_ctrl, by = "gene") %>%
+  mutate(gene = fct_reorder(gene, avg_txs))
+
+# plot average expression level per gene
+ggplot(dge_ctrls, aes(x = fct_reorder(gene, txs), y = txs + 1)) +
+  geom_boxplot(fill = "darkgray") +
+  scale_y_log10() +
+  labs(title = "Average gene expression (CROP-seq)", x = "Transcripts", y = "Gene") +
+  theme_bw()
+
+# create line plot
+ggplot(neg_perc_ctrl, aes(x = size, y = perc_neg, color = method)) +
+  facet_grid(panel~gene) + 
+  geom_hline(yintercept = 0.95) +
+  geom_line(aes(group = interaction(method, gene))) +
+  labs(x = "Sampling size", y = "Percentage of samplings with negative LFC", color = "Method") +
+  scale_color_manual(labels = c("tapseq" = "TAP-seq", "cropseq" = "CROP-seq"),
+                     values =  c("tapseq" = "firebrick2", "cropseq" = "gray42")) +
+  theme_bw()
+```
+
+***
+
+# Source
+* <a download="downsampled_target_reads.Rmd" href="`r base64enc::dataURI(file = params$rmd,
+    mime = 'text/rmd', encoding = 'base64')`">R Markdown source file (to produce this document)</a>
