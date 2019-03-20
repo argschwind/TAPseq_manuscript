@@ -99,3 +99,39 @@ rule downsampled_target_reads:
     "../scripts/downsampled_target_reads.Rmd"
 
 # screen experiments -------------------------------------------------------------------------------
+
+# chromosome 8 screen QC
+rule qc_8iScreen1:
+  input:
+    dge = "data/8iScreen1/dge.txt",
+    perturb_status = "data/8iScreen1/perturb_status.txt",
+    valid_dge = expand("data/{sample}/downsampled_dge.txt", sample = config["validation"]),
+    target_genes = "meta_data/target_genes_validation.csv",
+    exp_data = "meta_data/screen_experimental_info.csv",
+    vctr_seqs = "meta_data/cropseq_vectors_chr8_screen.fasta"
+  output:
+    "results/8iScreen1_qc.html"
+  params:
+    vector_pattern = config["create_vector_ref"]["vector_prefix"]
+  conda:
+    "../envs/r_analyses.yml"
+  script:
+    "../scripts/8iScreen1_qc.Rmd"
+    
+# chromosome 11 screen QC
+rule qc_11iScreen1:
+  input:
+    dge = "data/11iScreen1/dge.txt",
+    perturb_status = "data/11iScreen1/perturb_status.txt",
+    valid_dge = expand("data/{sample}/downsampled_dge.txt", sample = config["validation"]),
+    target_genes = "meta_data/target_genes_validation.csv",
+    exp_data = "meta_data/screen_experimental_info.csv",
+    vctr_seqs = "meta_data/cropseq_vectors_chr11_screen.fasta"
+  output:
+    "results/11iScreen1_qc.html"
+  params:
+    vector_pattern = config["create_vector_ref"]["vector_prefix"]
+  conda:
+    "../envs/r_analyses.yml"
+  script:
+    "../scripts/11iScreen1_qc.Rmd"
