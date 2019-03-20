@@ -7,7 +7,7 @@
 
 # import modules and functions
 from __future__ import print_function
-import sys, argparse, os
+import sys, argparse, os, gzip
 import pandas as pd
 import numpy as np
 
@@ -173,8 +173,12 @@ if __name__ == '__main__':
   # filter for cell barcodes on whitelist (if whitelist file is provided)
   if args.whitelist:
     eprint('Filtering for cell barcodes on provided whitelist...')
-    with open(args.whitelist) as whitelist_file:
-      whitelist = whitelist_file.read().splitlines()
+    if args.whitelist.endswith('.gz'):
+      with gzip.open(args.whitelist, 'rt') as f:
+        whitelist = f.read().splitlines()
+    else:
+      with open(args.whitelist, 'r') as f:
+        whitelist = f.read().splitlines()
     umi_obs = filter_cell_barcodes(umi_obs, whitelist)
   
   # downsample total genic reads if specified
