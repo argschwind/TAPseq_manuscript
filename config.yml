@@ -140,4 +140,11 @@ extract_dge:
     
 # step 4: analysis ---------------------------------------------------------------------------------
 downsample:
- reads_per_cell: 3500
+  reads_per_cell: 3500
+ 
+map_enhancers:
+  remove_lanes:
+    8iScreen1:  ["none"]
+    11iScreen1: ["none"]
+  min_cells: 25
+  threads: 5

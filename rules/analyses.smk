@@ -35,12 +35,13 @@ rule downsample:
   params:
     reads = lambda wildcards: config["dge_ncells"][wildcards.sample]
               * config["downsample"]["reads_per_cell"],
-    tpt_threshold = config["extract_dge"]["tpt_threshold"]
+    tpt_threshold = config["extract_dge"]["tpt_threshold"],
+    seed = 20190204
   conda:
     "../envs/dropseq_tools.yml"
   shell:
     "python scripts/extract_dge.py -i {input.umi_obs} -o {output.dge} -w {input.whitelist} "
-    "--sample {params.reads} --seed 20190204 --tpt_threshold {params.tpt_threshold} 2> {log}"
+    "--sample {params.reads} --seed {params.seed} --tpt_threshold {params.tpt_threshold} 2> {log}"
 
 # calculate reads on target genes enrichment
 rule reads_on_target:
@@ -135,3 +136,35 @@ rule qc_11iScreen1:
     "../envs/r_analyses.yml"
   script:
     "../scripts/11iScreen1_qc.Rmd"
+    
+# map enhancer-gene pairs using differential gene expression tests. method can be MAST, DEsingle or
+# LFC. strategy can be either "perEnh" or "perGRNA", specifying whether DE tests should be
+# performed using perturbations collapsed per enhancer or per gRNA
+rule diff_expr:
+  input:
+    dge = "data/{sample}/dge.txt",
+    perturb_status = "data/{sample}/perturb_status.txt"
+  output:
+    results = "data/{sample}/DE/output_{method}_{strategy}.csv",
+    cells = "data/{sample}/DE/ncells_{method}_{strategy}.csv"
+  log:
+    "data/{sample}/logs/diff_expr_{method}_{strategy}.log"
+  params:
+    vector_pattern = config["create_vector_ref"]["vector_prefix"],
+    exclude_lanes = lambda wildcards: config["map_enhancers"]["remove_lanes"][wildcards.sample],
+    min_cells = config["map_enhancers"]["min_cells"],
+    seed = 20190324
+  threads:
+    config["map_enhancers"]["threads"]
+  conda:
+    "../envs/r_map_enhancers.yml"
+  script:
+    "../scripts/differential_expression.R"
+    
+# perform all differential gene expression tests to map enhancers for both chr11 and chr8 screens
+rule map_enhancers:
+  input:
+    "data/8iScreen1/DE/output_MAST_perEnh.csv",
+    "data/8iScreen1/DE/output_MAST_perGRNA.csv",
+    "data/11iScreen1/DE/output_MAST_perEnh.csv",
+    "data/11iScreen1/DE/output_MAST_perGRNA.csv"

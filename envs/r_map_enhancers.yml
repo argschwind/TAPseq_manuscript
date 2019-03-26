@@ -1,0 +1,14 @@
+name: r_map_enhancers
+channels:
+  - bioconda
+  - conda-forge
+  - defaults
+  - r
+dependencies:
+  - r-base=3.5.1
+  - r-tidyverse=1.2.1
+  - r-here=0.1
+  - r-seurat=2.3.4
+  - bioconductor-mast=1.8.1
+  - bioconductor-desingle=1.2.1
+  - bioconductor-biocparallel=1.16.2
