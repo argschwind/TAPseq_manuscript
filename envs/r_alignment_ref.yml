@@ -5,11 +5,13 @@ channels:
   - defaults
   - r
 dependencies:
-  - r-base=3.4.1
+  - python=3.6.6
+  - r-base=3.5.1
   - r-optparse=1.6.0
   - r-tidyverse=1.2.1
-  - bioconductor-rtracklayer=1.38.3
-  - bioconductor-genomicranges=1.30.3
-  - bioconductor-genomicfeatures=1.30.3
-  - bioconductor-bsgenome=1.46.0
+  - bioconductor-biostrings=2.50.2
+  - bioconductor-rtracklayer=1.42.1
+  - bioconductor-genomicranges=1.34.0
+  - bioconductor-genomicfeatures=1.34.1
+  - bioconductor-bsgenome=1.50.0
   - bioconductor-bsgenome.hsapiens.ucsc.hg38=1.4.1

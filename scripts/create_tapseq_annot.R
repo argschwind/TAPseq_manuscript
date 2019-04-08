@@ -24,8 +24,8 @@ opt_parser = OptionParser(option_list = option_list)
 opt = parse_args(opt_parser)
 
 # function to check for required arguments
-check_required_args <- function(arg, opt, opt_parser){
-  if (is.null(opt[[arg]])){
+check_required_args <- function(arg, opt, opt_parser) {
+  if (is.null(opt[[arg]])) {
     print_help(opt_parser)
     stop(arg, " argument is required!", call. = FALSE)
   }
@@ -79,8 +79,13 @@ create_tapseq_ref <- function(txs_file, BSgenome_id, fasta_outfile, gtf_outfile)
 # create alignment reference data for gene loci
 tapseq_alignment_ref <- function(txs, genome) {
   
+  # convert txs to GRanges if it's a GRangesList
+  if (is(txs, "GRangesList")) {
+    txs <- unlist(txs)
+  }
+  
   # sort txs by coordinates
-  txs <- sort(unlist(txs))
+  txs <- sort(txs)
   
   # group transcripts by gene names
   genes <- split(txs, f = txs$gene_name)
@@ -159,10 +164,10 @@ create_contig_names <- function(overlap, genes) {
 }
 
 # get contig sequence for reference contigs
-get_contig_seqs <- function(contigs, genome){
+get_contig_seqs <- function(contigs, genome) {
   
   # abort if genome is not a BSgenome or DNAStringSet object
-  if (class(genome) != "BSgenome" & class(genome) != "DNAStringSet"){
+  if (!any(is(genome, "BSgenome") | is(genome, "DNAStringSet"))) {
     
     stop("genome must be of class BSgenome or DNAStringSet!", call. = FALSE)
     
@@ -209,7 +214,7 @@ export_gtf <- function(x, filepath) {
             which(attr_names == "transcript_id"))
   
   # abort if mandatory fields not found
-  if (length(mand) != 2){
+  if (length(mand) != 2) {
     
     stop("Mandatory attributes \"gene_id\" and \"transcript_id\" not found!",
          call. = FALSE)
@@ -242,4 +247,4 @@ export_gtf <- function(x, filepath) {
 # create tap-seq alignment references --------------------------------------------------------------
 
 create_tapseq_ref(txs_file = opt$txs_file, BSgenome_id = opt$BSgenome_id,
-                   fasta_outfile = opt$fasta_outfile, gtf_outfile = opt$gtf_outfile)
+                  fasta_outfile = opt$fasta_outfile, gtf_outfile = opt$gtf_outfile)

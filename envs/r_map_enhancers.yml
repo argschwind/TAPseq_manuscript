@@ -5,6 +5,7 @@ channels:
   - defaults
   - r
 dependencies:
+  - python=3.6.6
   - r-base=3.5.1
   - r-tidyverse=1.2.1
   - r-here=0.1

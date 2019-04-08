@@ -4,8 +4,8 @@ channels:
   - bioconda
   - conda-forge
 dependencies:
-  - wget=1.19.5
   - python=3.6.6
+  - wget=1.19.5
   - biopython=1.72
   - pandas=0.24.0
   - numpy=1.16.0

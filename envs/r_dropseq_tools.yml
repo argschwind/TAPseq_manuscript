@@ -8,11 +8,11 @@ dependencies:
   - python=3.6.6
   - pandoc=1.19.2.1
   - readline=7.0
-  - r-base=3.4.1
-  - r-knitr
-  - r-rmarkdown
-  - r-digest
-  - r-optparse
-  - r-tidyverse
-  - r-here
-  - r-plotly
+  - r-base=3.5.1
+  - r-knitr=1.20
+  - r-rmarkdown=1.10
+  - r-digest=0.6.18
+  - r-optparse=1.6.0
+  - r-tidyverse=1.2.1
+  - r-here=0.1
+  - r-plotly=4.8.0
