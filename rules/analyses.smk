@@ -106,6 +106,7 @@ rule qc_8iScreen1:
   input:
     dge = "data/8iScreen1/dge.txt",
     perturb_status = "data/8iScreen1/perturb_status.txt",
+    dge_stats = "data/8iScreen1/dge_summary.txt",
     valid_dge = expand("data/{sample}/downsampled_dge.txt", sample = config["validation"]),
     target_genes = "meta_data/target_genes_validation.csv",
     exp_data = "meta_data/screen_experimental_info.csv",
@@ -124,6 +125,7 @@ rule qc_11iScreen1:
   input:
     dge = "data/11iScreen1/dge.txt",
     perturb_status = "data/11iScreen1/perturb_status.txt",
+    dge_stats = "data/11iScreen1/dge_summary.txt",
     valid_dge = expand("data/{sample}/downsampled_dge.txt", sample = config["validation"]),
     target_genes = "meta_data/target_genes_validation.csv",
     exp_data = "meta_data/screen_experimental_info.csv",
