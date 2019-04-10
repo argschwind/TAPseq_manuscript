@@ -15,13 +15,13 @@ include: "rules/analyses.smk"
 # (samples and cells are read from config file)
 rule all:
   input:
-   align = expand("results/alignment/{sample}_align_report.html", sample = config["samples"]),
-   dge = expand("results/dge/{sample}_dge_report.html", sample = config["samples"]),
-   analyses = ["results/tapseq_vs_cropseq.html",
-               "results/downsampled_dge.html",
-               "results/downsampled_target_reads.html",
-               "results/8iScreen1_qc.html",
-               "results/11iScreen1_qc.html"]
+    align = expand("results/alignment/{sample}_align_report.html", sample = config["samples"]),
+    dge = expand("results/dge/{sample}_dge_report.html", sample = config["samples"]),
+    analyses = ["results/tapseq_vs_cropseq.html",
+                "results/downsampled_dge.html",
+                "results/downsampled_target_reads.html",
+                "results/8iScreen1_qc.html",
+                "results/11iScreen1_qc.html"]
 
 # functions to run workflow only partially ---------------------------------------------------------
 
@@ -46,3 +46,10 @@ rule alignment_reference:
 rule align:
   input:
     expand("results/alignment/{sample}_align_report.html", sample = config["samples"])
+    
+# run workflow until digital gene expression (DGE) extraction. this concludes the data processing
+# part of the project
+rule dge:
+  input:
+    align = expand("results/alignment/{sample}_align_report.html", sample = config["samples"]),
+    dge = expand("results/dge/{sample}_dge_report.html", sample = config["samples"])

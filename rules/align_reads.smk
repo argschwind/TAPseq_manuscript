@@ -197,7 +197,8 @@ rule star_align:
     "data/{sample}/star.Log.final.out"
   params:
     outprefix = "data/{sample}/star."
-  threads: config["star_align"]["threads"]
+  threads:
+    config["star_align"]["threads"]
   conda:
     "../envs/dropseq_tools.yml"
   shell:
@@ -256,7 +257,7 @@ rule merge_bam:
 # tag reads with gene exons
 rule tag_with_gene_exon:
   input:
-    mapped_bam = "data/{sample}/merged_aligned.bam",
+    bam = "data/{sample}/merged_aligned.bam",
     annot = lambda wildcards: config["align_ref"][wildcards.sample] + "/cropseq_ref.refFlat"
   output:
     protected("data/{sample}/gene_tagged_aligned.bam")
@@ -266,7 +267,7 @@ rule tag_with_gene_exon:
     "../envs/dropseq_tools.yml"
   shell:
     "TagReadWithGeneExon "
-    "INPUT={input.mapped_bam} "
+    "INPUT={input.bam} "
     "OUTPUT={output} "
     "ANNOTATIONS_FILE={input.annot} "
     "TAG=GE "
@@ -316,7 +317,8 @@ rule align_report:
     star_smry = "data/{sample}/star.Log.final.out",
     adapt_trim = "data/{sample}/adapter_trimming_report.txt",
     polyA_trim = "data/{sample}/polyA_trimming_report.txt",
-    reads_per_cell = "data/{sample}/reads_per_cell_barcode.txt"
+    reads_per_cell = "data/{sample}/reads_per_cell_barcode.txt",
+    bai = "data/{sample}/gene_tagged_aligned.bai"  # not input, just to complete alignment workflow
   output:
     "results/alignment/{sample}_align_report.html"
   params:

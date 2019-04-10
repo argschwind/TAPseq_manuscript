@@ -94,7 +94,7 @@ create_vector_ref:
     "CROPseq_dCas9_DS_"
   
 create_genomedir:
-  star_threads: 5
+  threads: 5
   sjdb_overhang: 57
   
 # step 2: align reads ------------------------------------------------------------------------------

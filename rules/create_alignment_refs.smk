@@ -109,7 +109,7 @@ rule create_genomedir:
   params:
     outprefix = "data/{align_ref}/star.",
     sjdb_overhang = config["create_genomedir"]["sjdb_overhang"]
-  threads: config["create_genomedir"]["star_threads"]
+  threads: config["create_genomedir"]["threads"]
   conda:
     "../envs/dropseq_tools.yml"
   shell:
