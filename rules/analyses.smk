@@ -139,6 +139,21 @@ rule qc_11iScreen1:
   script:
     "../scripts/11iScreen1_qc.Rmd"
     
+# collapse perturbation status by gRNA vector targets
+rule collapse_perturbations:
+  input:
+    pert_status = "data/{sample}/perturb_status.txt",
+    grna_targets = lambda wildcards: config["collapse_perturbations"]["targets"][wildcards.sample]
+  output:
+    "data/{sample}/perturb_status_collapsed.txt"
+  log:
+    "data/{sample}/logs/collapse_perturbations.log"
+  conda:
+    "../envs/dropseq_tools.yml"
+  shell:
+    "python scripts/collapse_perturbations.py -i {input.pert_status} -t {input.grna_targets} "
+    "-o {output} 2> {log}"
+    
 # map enhancer-gene pairs using differential gene expression tests. method can be MAST, DEsingle or
 # LFC. strategy can be either "perEnh" or "perGRNA", specifying whether DE tests should be
 # performed using perturbations collapsed per enhancer or per gRNA

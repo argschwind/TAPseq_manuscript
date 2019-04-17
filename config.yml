@@ -138,9 +138,14 @@ umi_observations:
 extract_dge:
   tpt_threshold: 0.25
     
-# step 4: analysis ---------------------------------------------------------------------------------
+# step 4: analyses ---------------------------------------------------------------------------------
 downsample:
   reads_per_cell: 3500
+ 
+collapse_perturbations:
+  targets:
+    8iScreen1:  "meta_data/vector_targets_chr8_screen.csv"
+    11iScreen1: "meta_data/vector_targets_chr11_screen.csv"
  
 map_enhancers:
   remove_lanes:
