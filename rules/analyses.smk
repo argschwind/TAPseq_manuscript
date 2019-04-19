@@ -19,6 +19,18 @@ def get_cbc_whitelist(wildcards):
     whitelist = "meta_data/10x_bc_whitelist_737k_201608.txt"
   return whitelist
   
+# get correct perturbation status input file for DE strategies
+def perturb_status_file(wildcards):
+  sample = wildcards.sample
+  strategy = wildcards.strategy
+  if strategy == "perGRNA":
+    pert_file = "data/" + sample + "/perturb_status.txt"
+  elif strategy == "perEnh":
+    pert_file = "data/" + sample + "/perturb_status_collapsed.txt"
+  else:
+    raise ValueError("strategy mus be 'perGRNA' or 'perEnh'!")
+  return(pert_file)
+  
 # validation experiments ---------------------------------------------------------------------------
 
 # rule to downsample genic reads to the same sequencing depth per sample and then extract dge
@@ -160,10 +172,10 @@ rule collapse_perturbations:
 rule diff_expr:
   input:
     dge = "data/{sample}/dge.txt",
-    perturb_status = "data/{sample}/perturb_status.txt"
+    perturb_status = perturb_status_file
   output:
-    results = "data/{sample}/DE/output_{method}_{strategy}.csv",
-    cells = "data/{sample}/DE/ncells_{method}_{strategy}.csv"
+    results = "data/{sample}/diff_expr/output_{method}_{strategy}.csv",
+    ncells =  "data/{sample}/diff_expr/ncells_{method}_{strategy}.csv"
   log:
     "data/{sample}/logs/diff_expr_{method}_{strategy}.log"
   params:
@@ -181,7 +193,7 @@ rule diff_expr:
 # perform all differential gene expression tests to map enhancers for both chr11 and chr8 screens
 rule map_enhancers:
   input:
-    "data/8iScreen1/DE/output_MAST_perEnh.csv",
-    "data/8iScreen1/DE/output_MAST_perGRNA.csv",
-    "data/11iScreen1/DE/output_MAST_perEnh.csv",
-    "data/11iScreen1/DE/output_MAST_perGRNA.csv"
+    "data/8iScreen1/diff_expr/output_MAST_perEnh.csv",
+    "data/8iScreen1/diff_expr/output_MAST_perGRNA.csv",
+    "data/11iScreen1/diff_expr/output_MAST_perEnh.csv",
+    "data/11iScreen1/diff_expr/output_MAST_perGRNA.csv"
