@@ -39,13 +39,8 @@ cells_per_pert <- rowSums(perturb_status > 0)
 cells_per_pert <- data.frame(perturbation = rownames(perturb_status), cells = cells_per_pert)
 write.csv(cells_per_pert, file = snakemake@output$ncells, row.names = FALSE)
 
-# get 10x lane barcodes (i7 barcodes) of all cells to use as covariate if supported
-cells <- colnames(perturb_status)
-i7 <- substr(cells, start = 1, stop = 8)
-lanes_10x <- DataFrame(lane_10x = factor(i7), row.names = cells)
-
 # create tap-seq SingleCellExperiment object
-sce <- create_tapseq_sce(dge = dge, perturb_status = perturb_status, meta_data = lanes_10x,
+sce <- create_tapseq_sce(dge = dge, perturb_status = perturb_status,
                          vector_pattern = snakemake@params$vector_pattern)
 
 # remove cells from specified 10x lanes
@@ -61,12 +56,17 @@ if (all(snakemake@params$exclude_lanes != "none")) {
   
 }
 
+# perform PCA on gene expression data, extract PC loadings, and add as colData to use as covariates
+pca_genex <- prcomp(t(assay(sce)), scale. = TRUE)
+pcs <- seq_len(as.integer(snakemake@wildcards$npcs))
+pc_loadings <- DataFrame(pca_genex$x[, pcs])
+colData(sce) <- pc_loadings
+
 # perform DE tests =================================================================================
 
 # perform differential gene expression analysis
 output <- test_differential_expression(sce, min_cells = snakemake@params$min_cells,
-                                       method = snakemake@wildcards$method,
-                                       parallel = parallel)
+                                       method = "MAST", parallel = parallel)
 
 # save output
 write.csv(output, file = snakemake@output$results, row.names = FALSE)
