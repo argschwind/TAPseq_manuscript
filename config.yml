@@ -150,6 +150,8 @@ collapse_perturbations:
 map_enhancers:
   remove_lanes:
     8iScreen1:  ["none"]
-    11iScreen1: ["none"]
-  min_cells: 25
+    11iScreen1: ["CATCGACC"]
+  min_cells:
+    perEnh:  25
+    perGRNA: 15
   threads: 5

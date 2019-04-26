@@ -7,9 +7,12 @@ channels:
 dependencies:
   - python=3.6.6
   - r-base=3.5.1
-  - r-tidyverse=1.2.1
+  - r-bookdown=0.7
+  - r-gridExtra=2.3
+  - r-ggrepel=0.8.0
   - r-here=0.1
-  - r-seurat=2.3.4
-  - bioconductor-mast=1.8.1
-  - bioconductor-desingle=1.2.1
+  - r-scales=1.0.0
+  - r-tidyverse=1.2.1
   - bioconductor-biocparallel=1.16.2
+  - bioconductor-mast=1.8.1 
+  - bioconductor-rtracklayer=1.42.1

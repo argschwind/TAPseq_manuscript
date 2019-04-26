@@ -1,0 +1,629 @@
+---
+title: "Map enhancers"
+author: "Andreas Gschwind"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+params:
+  rmd: "map_enhancers.Rmd"
+output:
+  bookdown::html_document2:
+    toc: yes
+---
+
+# Goal
+Differential gene expression was used to map enhacners to their target genes.
+
+```{css echo=FALSE}
+/* Define a margin before every image element */
+img {
+  margin-top: 3em;
+}
+```
+
+```{r setup, include=FALSE}
+# set global chunk options
+knitr::opts_chunk$set(echo = FALSE)
+
+# attach required packages
+library(gridExtra)
+library(here)
+library(readxl)
+library(rtracklayer)
+library(tidyverse)
+library(tools)
+```
+
+```{r loadData}
+# files containing number of cell pert perturbation
+ncell_files <- here(snakemake@input$ncells)
+
+# set name for each file
+samples <- basename(dirname(dirname(ncell_files)))
+method <- sub("ncells_", "", basename(file_path_sans_ext(ncell_files)))
+names(ncell_files) <- paste(samples, method, sep = "_")
+
+# files containing differential expression results
+result_files <- here(snakemake@input$results)
+
+# set name for each file
+samples <- basename(dirname(dirname(result_files)))
+method <- sub("output_", "", basename(file_path_sans_ext(result_files)))
+names(result_files) <- paste(samples, method, sep = "_")
+
+# read files
+ncells <- lapply(ncell_files, FUN = read.csv, stringsAsFactors = FALSE)
+results <- lapply(result_files, FUN = read.csv, stringsAsFactors = FALSE)
+
+# convert to one data.frame
+ncells <- ncells %>%
+  bind_rows(.id = "id") %>%
+  separate(id, into = c("sample", "method", "strategy"), sep = "_")
+
+results <- results %>%
+  bind_rows(.id = "id") %>%
+  separate(id, into = c("sample", "method", "strategy"), sep = "_")
+
+# load dge data
+dge_files <- here(snakemake@input$dge)
+names(dge_files) <- basename(dirname(dge_files))
+dge <- lapply(dge_files, FUN = read.table, header = TRUE, row.names = "GENE", 
+              stringsAsFactors = FALSE)
+```
+
+# Number of cell per perturbation
+The numbers of cells per perturbation are plotted for per sample and strategy.
+```{r ncells}
+# minimum number of cells per perturbation used for DE tests
+min_cells <- snakemake@config$map_enhancers$min_cells %>%
+  unlist() %>%
+  data.frame(strategy = names(.), min_cells = .)
+
+# calculate percentage of perturbation with at least min_cells cells
+cells_perc <- ncells %>%
+  group_by(sample, strategy) %>%
+  summarize(cells = sum(cells >= min_cells[strategy, "min_cells"]),
+            cells_perc = cells / n() * 100)
+
+# plot number of cells pert perturbation
+ggplot(ncells, aes(cells)) +
+  facet_grid(strategy~sample, scales = "free") +
+  geom_histogram(bins = 45) +
+  geom_vline(data = min_cells, aes(xintercept = min_cells), color = "firebrick") +
+  labs(title = "Cells per perturbation") +
+  theme_bw()
+```
+
+# Principal component covariates
+```{r}
+# function to extract gene expression data from total dge
+extract_genex <- function(x, vector_pattern) {
+  gene_rows <- grep(rownames(x), pattern = vector_pattern, invert = TRUE)
+  x[gene_rows, ]
+}
+
+# function to filter dge for cells that come from certain 10x lanes
+filter_lanes <- function(x, lanes) {
+  cells <- colnames(x)
+  cell_lanes <- substr(cells, start = 1, stop = 8)
+  cells_filt <- cells[!cell_lanes %in% lanes]
+  x[, cells_filt]
+}
+
+# function to extract variance explained by PCs
+extract_var_expl <- function(x, pcs = seq_len(10)) {
+  smry <- summary(x)
+  var <- smry$importance["Proportion of Variance", pcs]
+  data.frame(pc = as.integer(sub("PC", "", names(var))), var = var, row.names = NULL)
+}
+
+# 10x lanes excluded from DE tests
+rm_lanes <- unlist(snakemake@config$map_enhancers$remove_lanes)
+rm_lanes[rm_lanes == "none"] <- NA
+
+# extract gene expression data and filter for 10x lanes
+genex <- dge %>%
+  lapply(FUN = extract_genex, vector_pattern = snakemake@params$vector_pattern) %>%
+  mapply(FUN = filter_lanes, x = ., lanes = rm_lanes, SIMPLIFY = FALSE)
+
+# perform pca
+pca <- genex %>%
+  lapply(FUN = t) %>%
+  lapply(FUN = prcomp, scale. = TRUE)
+  
+# extract variance explained for the first 10 PCs
+var_explained <- pca %>%
+  lapply(FUN = extract_var_expl) %>%
+  bind_rows(.id = "sample")
+
+# scree plot
+ggplot(var_explained, aes(x = factor(pc), y = var, color = sample, group = sample)) +
+  geom_point() +
+  geom_line() +
+  labs(x = "Principal component", y = "Variance explained", color = "Sample") +
+  theme_bw()
+```
+
+# Differentially expressed genes
+
+## P-value distribution
+```{r pvalueDistr}
+# correct for multiple testing across samples using FDR
+results <- results %>%
+  group_by(strategy) %>%
+  rename(pval_adj_sample = pval_adj_allTests) %>%
+  mutate(pval_adj_allTests = p.adjust(pvalue, method = "fdr"))
+
+# plot p-value distribution
+ggplot(results, aes(pvalue)) +
+  facet_grid(strategy~sample, scales = "free") +
+  geom_histogram(bins = 100) +
+  labs(title = "P-value distribution") +
+  theme_bw()
+```
+
+## Singificant hits
+The numbers and percentages of significant hits per sample and strategy are plotted.
+```{r hitsVsFdr, fig.height=7, fig.width=7}
+# count the number and proportion of hits across different FDR values
+hits <- results %>%
+  group_by(sample, strategy) %>%
+  summarize("0.05" = sum(pval_adj_allTests < 0.05),
+            "0.1" = sum(pval_adj_allTests < 0.1),
+            "0.15" = sum(pval_adj_allTests < 0.15),
+            "0.2" = sum(pval_adj_allTests < 0.2),
+            tests = n()) %>%
+  gather(key = "fdr", value = "hits", -sample, -strategy, -tests) %>%
+  mutate(fdr = as.numeric(fdr)) %>%
+  mutate(prop_hits = hits / tests)
+
+# plot number of hits as function of FDR
+p1 <- ggplot(hits, aes(x = fdr, y = hits, color = sample, lty = strategy)) +
+  geom_point() +
+  geom_line() +
+  labs(x = "FDR cutoff", y = "Significant tests", title = "Number of significant tests") +
+  theme_bw()
+
+# plot proportion of hits as function of FDR
+p2 <- ggplot(hits, aes(x = fdr, y = prop_hits, color = sample, lty = strategy)) +
+  geom_point() +
+  geom_line() +
+  labs(x = "FDR cutoff", y = "Significant tests", title = "Proportion of significant tests") +
+  scale_y_continuous(labels = scales::percent) +
+  theme_bw()
+
+# print plots
+grid.arrange(p1, p2, ncol = 1)
+```
+
+## Map enhancers
+Significant hits (FDR < 0.05) from the per enhancer approach are used to infer enhancer - target
+gene pairs. The per gRNA results are used to assign a confidence level to each enhacner - gene pair
+based on how many individual gRNAs had a significant association.
+```{r confidence}
+enh_perts <- results %>%
+  filter(strategy == "perEnh") %>%
+  mutate(significant = if_else(pval_adj_allTests < 0.05, true = "sig", false = "not_sig"))
+
+# function to collapse gRNA ids per targeted enhancer
+collapse_grnas <- function(grnas) {
+  grnas <- sub("_.+", "", grnas)
+  sub("\\.[A|B|C|D]", "", grnas)
+}
+
+# count number of gRNA hits per enhancer-gene pair
+gRNA_hits <- results %>%
+  filter(strategy == "perGRNA") %>%
+  mutate(perturbation = collapse_grnas(perturbation)) %>%
+  group_by(sample, perturbation, gene) %>%
+  summarize(grna_hits = sum(pval_adj_allTests < 0.05),
+            prop_grna_hits = mean(pval_adj_allTests < 0.05))
+
+# add single gRNA hits to enhancer hits
+enh_perts <- left_join(enh_perts, gRNA_hits, by = c("sample", "perturbation", "gene"))
+
+# calculate number of hits per confidence level
+hits_conf_levels <- enh_perts %>%
+  group_by(sample, grna_hits) %>%
+  summarize(hits = sum(pval_adj_allTests < 0.05))
+
+# plot number of hits per confidence level
+ggplot(hits_conf_levels, aes(x = as.factor(grna_hits), y = hits, fill = sample)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(x = "gRNA hits (pvalue adj. < 0.05)", y = "Hits", title = "Hits per confidence level",
+       fill = "Sample") +
+  theme_bw()
+```
+
+# Discovery perturbations
+Data on discovery perturbations (not controls) is extracted and genomic properties such as distance
+to TSS are assessed.
+
+```{r importChain}
+# download chain file for hg19 to hg38 liftover
+chain_url <- "http://hgdownload.soe.ucsc.edu/gbdb/hg19/liftOver/hg19ToHg38.over.chain.gz"
+chain_file <- tempfile("hg19ToHg38", fileext = ".gz")
+download.file(chain_url, chain_file)
+system(paste("gunzip", chain_file))
+
+# import chain file
+hg19_to_hg38_chain <- import.chain(tools::file_path_sans_ext(chain_file))
+```
+
+```{r enhCoords}
+# extract data on discovery perturbations
+disc_perts <- enh_perts %>%
+  filter(grepl(perturbation, pattern = "^chr.+$")) %>%
+  as.data.frame()
+
+# extract enhancer coordinates from perturbation id and create GRanges object
+enh_coords_hg19 <- disc_perts %>%
+  select(perturbation) %>%
+  distinct() %>%
+  separate(perturbation, into = c("chr", "start", "end"), remove = FALSE) %>%
+  column_to_rownames(var = "perturbation") %>%
+  makeGRangesFromDataFrame()
+
+# liftover from hg19 to hg38
+enh_coords_hg38 <- enh_coords_hg19 %>%
+  liftOver(chain = hg19_to_hg38_chain) %>%
+  unlist()
+
+# compute center of every enhancer
+enh_centers <- data.frame(perturbation = names(enh_coords_hg38),
+                          enh_chr = sub("chr", "", as.character(seqnames(enh_coords_hg38))),
+                          enh_center = round((start(enh_coords_hg38) + end(enh_coords_hg38)) / 2),
+                          stringsAsFactors = FALSE)
+
+# add enhancer centers to de results
+disc_perts <- disc_perts %>%
+  left_join(enh_centers, by = "perturbation")
+```
+
+```{r calcDistToTSS}
+# load target gene annotations
+annot <- lapply(here(snakemake@input$annot), FUN = import, format = "gtf")
+
+# merge into one GRangesList object, separated by genes 
+genes <- annot %>%
+  do.call("c", .) %>%
+  unique() %>%
+  split(f = .$gene_name)
+
+# get chromosome and strand for each gene
+gene_chr <- unlist(unique(seqnames(genes)))
+gene_strand <- unlist(unique(strand(genes)))
+
+# function to get a genes TSS
+get_tss <- function(x) {
+  if (all(strand(x) == "+")) {
+    min(start(x))
+  }else if (all(strand(x) == "-")) {
+    max(end(x))
+  }else{
+    stop("Inconsistent strand information!")
+  }
+}
+
+# get TSS for each gene
+gene_tss <- sapply(genes, FUN = get_tss)
+
+# create data.frame with strand and tss coordinates for every gene
+tss_coords <- data.frame(gene_chr, gene_strand, gene_tss, check.rows = TRUE) %>%
+  rownames_to_column(var = "gene") %>%
+  mutate_if(is.factor, as.character)
+
+# add to discovery perturbation results
+disc_perts <- left_join(disc_perts, tss_coords, by = "gene")
+
+# calculate distance to tss for every enhancer - gene pair
+disc_perts <- disc_perts %>%
+  mutate(dist_to_tss = if_else(gene_strand == "+",
+                               true  = enh_center - gene_tss,
+                               false = gene_tss - enh_center))
+
+# only retain enhancer - gene pairs on the same chromosomes
+disc_perts_cis <- filter(disc_perts, enh_chr == gene_chr)
+```
+
+## Number of cis-enhancers per gene
+
+```{r enhPerGene}
+# count the number of enhancers for each gene
+enh_per_gene <- disc_perts_cis %>%
+  group_by(sample, gene) %>%
+  summarize(enh = sum(significant == "sig"))
+
+# compute proportion of genes with at least one discovered enhancer
+disc_enh <- enh_per_gene %>%
+  summarize(enh = sum(enh > 0),
+            genes = n(),
+            prop_enh = enh / genes)
+
+# print table
+disc_enh
+
+# compute number of genes per enhancer count
+enh_counts <- enh_per_gene %>%
+  filter(enh > 0) %>%
+  group_by(sample, enh) %>%
+  summarize(genes = n()) %>%
+  spread(key = "sample", value = "genes", fill = 0) %>%
+  gather(key = "sample", value = "genes", -enh)
+
+# plot number of genes per enhancer count
+ggplot(enh_counts, aes(x = factor(enh, levels = seq_len(max(enh))), y = genes, fill = sample)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(x = "Number of enhancers", y = "genes", fill = "Sample") +
+  scale_x_discrete(drop = FALSE) +
+  theme_bw()
+```
+
+
+## P-value vs distance to TSS
+```{r dTssVsPval}
+# calculate -log10 p-value
+disc_perts_cis <- mutate(disc_perts_cis, neg_log10_pvalue = -log10(pvalue))
+
+# plot -log10 p-value as a function of distance to TSS
+ggplot(disc_perts_cis, aes(x = dist_to_tss / 1e6, y = neg_log10_pvalue, color = significant)) +
+  facet_wrap(~sample, ncol = 1, scales = "free") +
+  geom_point(data = filter(disc_perts_cis, significant == "not_sig")) +
+  geom_point(data = filter(disc_perts_cis, significant == "sig")) +
+  labs(x = "Distance to TSS (Mb)", y = expression(-log[10] ~ p - value)) +
+  scale_color_manual(values = c(not_sig = "darkgray", sig = "firebrick2")) +
+  theme_bw()
+```
+
+```{r dTssVsPval2}
+# same plot, but color accoring to confidence level
+ggplot(disc_perts_cis,
+             aes(x = dist_to_tss / 1e6, y = neg_log10_pvalue, color = prop_grna_hits)) +
+  facet_wrap(~sample, ncol = 1, scales = "free") +
+  geom_point(data = filter(disc_perts_cis, significant == "not_sig")) +
+  geom_point(data = filter(disc_perts_cis, significant == "sig")) +
+  labs(x = "Distance to TSS (Mb)", y = expression(-log[10] ~ p - value)) +
+  scale_color_gradient(low = "blue", high = "orangered") +
+  theme_bw()
+```
+
+```{r dTssVsPval3}
+# only select significant enhancer - gene pairs
+enh_gene_pairs <- filter(disc_perts_cis, significant == "sig")
+
+# get hit closest to TSS
+closest <- min(abs(enh_gene_pairs$dist_to_tss))
+
+# plot decay of significance over distance within 1Mb of TSS
+disc_perts_cis %>%
+  filter(abs(dist_to_tss) >= closest) %>%
+  ggplot(., aes(x = abs(dist_to_tss), y = neg_log10_pvalue, color = significant)) +
+    geom_point() +
+    geom_smooth(method = "loess", se = FALSE) +
+    labs(x = "Distance to TSS (kb)", y = expression(-log[10] ~ p - value)) +
+    scale_x_log10() +
+    scale_color_manual(values = c(not_sig = "darkgray", sig = "firebrick2")) +
+    theme_bw()
+```
+
+## Distance to TSS across confidence levels
+```{r dTssVsConf}
+# plot the distance to TSS vs number of gRNA hits
+ggplot(enh_gene_pairs, aes(x = as.factor(grna_hits), y = abs(dist_to_tss) / 1000, fill = sample)) +
+  geom_boxplot() +
+  labs(x = "Confidence level (gRNA hits)", y = "Distance to TSS (kb)") +
+  scale_y_log10() +
+  theme_bw()
+```
+
+# Gasperini et al
+Assessed enhancers and results from [Gasperini et al., 2018](https://www.sciencedirect.com/science/article/pii/S009286741831554X?via%3Dihub) are downloaded
+for comparison with our results.
+```{r downloadGasperini}
+# url with supplementary data files
+table_s2_url <- "https://ars.els-cdn.com/content/image/1-s2.0-S009286741831554X-mmc2.xlsx"
+
+# download excel sheet
+table_s2_file <- tempfile("table_s2", fileext = ".xlsx")
+download.file(table_s2_url, table_s2_file)
+
+# import spreadsheets
+table_s2a <- read_excel(table_s2_file, sheet = 2)
+table_s2b <- read_excel(table_s2_file, sheet = 3)
+```
+
+```{r}
+# get range of our regions of chromosome 8 and 11 (hg19)
+region_range <- range(enh_coords_hg19)
+
+# extract all tested enhancers by gasperini et al and create GRanges object containing coordinates
+gasp_sites <- table_s2a %>%
+  as.data.frame() %>%
+  filter(grepl(Category, pattern = "candidate_enhancer")) %>%
+  select(Target_Site, chr.candidate_enhancer, start.candidate_enhancer, stop.candidate_enhancer) %>%
+  distinct() %>%
+  column_to_rownames(var = "Target_Site") %>%
+  rename(chr = 1, start = 2, end = 3) %>%
+  makeGRangesFromDataFrame(.)
+
+# get significant enhancer - gene pairs from gasperini et al results
+gasp_hits <- table_s2b %>%
+  as.data.frame() %>%
+  select(Target_Site, chr.candidate_enhancer, start.candidate_enhancer, stop.candidate_enhancer,
+         target_gene_short, high_confidence_subset) %>%
+  rename(chr = 2, start = 3, end = 4, gene = 5) %>%
+  makeGRangesFromDataFrame(., keep.extra.columns = TRUE)
+
+# extract sites overlapping with our regions
+gasp_sites_regions <- subsetByOverlaps(x = gasp_sites, ranges = region_range)
+gasp_hits_regions <- subsetByOverlaps(gasp_hits, region_range)
+```
+
+The number of sites from Gasperini et al within our regions is calculated and the success rates are
+compared:
+
+```{r}
+# only retain gasperini hits that involve assessed target genes in our regions
+gasp_genes <- genes[names(genes) %in% gasp_hits_regions$gene]
+gasp_genes_chrs <- unlist(unique(seqnames(gasp_genes)))
+
+# add gene chromosome to hits
+gasp_hits_targets <- gasp_hits_regions[gasp_hits_regions$gene %in% names(gasp_genes)]
+gasp_hits_targets$gene_chr <- gasp_genes_chrs[gasp_hits_targets$gene]
+
+# annotate assessed enhancers by whether they were associated to any gene or not
+gasp_sites_regions$enhancer <- names(gasp_sites_regions) %in% gasp_hits_targets$Target_Site
+enh_coords_hg19$enhancer <- names(enh_coords_hg19) %in% enh_gene_pairs$perturbation
+
+# create table containing number of significant and non-significant sites
+hits_table <- rbind(table(enh_coords_hg19$enhancer), table(gasp_sites_regions$enhancer))
+hits_table <- data.frame(hits_table, row.names = c("TAP-seq", "Gasperini"))
+colnames(hits_table) <- c("non_sig", "sig")
+
+# print table
+knitr::kable(hits_table)
+
+# fisher's exact test
+fisher.test(as.matrix(hits_table))
+```
+
+```{r}
+# number of gasperini sites that overlap with any sites tested in TAP-seq
+gasp_in_tapseq <- subsetByOverlaps(x = gasp_sites_regions, ranges = enh_coords_hg19)
+
+# get gasperini sites that overlap with our discovered enhancers
+gasp_in_enh <- subsetByOverlaps(x = gasp_sites_regions,
+                                ranges = enh_coords_hg19[enh_coords_hg19$enhancer])
+
+# total number of gasperini sites within our regions
+n_gasp_regions <- length(gasp_sites_regions)
+
+# number of gasperini sites also assessed by tap-seq
+n_gasp_in_tapseq <- length(gasp_in_tapseq)
+
+# number of our significant enhancer - gene pairs assessed by Gasperini et al.
+n_gasp_in_enh <- length(gasp_in_enh)
+
+# number of enhancers only discovered in tap-seq
+n_tapseq_only <- sum(!gasp_in_enh$enhancer)
+```
+
+A total of **`r n_gasp_in_tapseq`** sites (out of `r n_gasp_regions`) from Gasperini et al. are also
+assessed in the TAP-seq screens. Only **`r n_gasp_in_enh`** of those sites were discoverd as
+enhancers by TAP-seq, wheras only **`r n_tapseq_only`** of those discoveries.
+
+# H3K27ac HiChip
+
+HiChIP loops for K562 H3K27ac from [Mumbach et al., 2018](https://www.nature.com/articles/ng.3963)
+are downloaded.
+
+```{r}
+# url with supplementary data files
+table_s2_url <- "https://media.nature.com/original/nature-assets/ng/journal/v49/n11/extref/ng.3963-S4.xlsx"
+
+# download excel sheet
+table_s2_file <- tempfile("table_s2", fileext = ".xlsx")
+download.file(table_s2_url, table_s2_file)
+
+# import spreadsheets
+table_s2 <- read_excel(table_s2_file, sheet = 6,
+                       col_types = c("text", "numeric", "numeric", "text", "numeric", "numeric"))
+
+# convert to data.frame
+table_s2 <- as.data.frame(table_s2)
+
+# add 'chr' to chromosome id
+table_s2$chr_x <- paste0("chr", table_s2$chr_x)
+table_s2$chr_y <- paste0("chr", table_s2$chr_y)
+```
+
+The high-confidence loops are overlapped any assessed enhancers and target genes If a loop connects
+an enhancer to a target gene promoter, it is then checked whether that interaction was reported as a
+significant enhancer - gene pair.
+
+```{r}
+# add loop identifier
+table_s2 <-  mutate(table_s2, loop = paste0(chr_x, "_", seq_len(nrow(table_s2))))
+
+# create GRanges object with the start and ends of loops
+loop_starts <- table_s2 %>%
+  select(chr_x, start_x, stop_x, loop) %>%
+  mutate(type = "start") %>%
+  rename(chr = chr_x, start = start_x, stop = stop_x) %>%
+  makeGRangesFromDataFrame(keep.extra.columns = TRUE)
+
+loop_ends <- table_s2 %>%
+  select(chr_y, start_y, stop_y, loop) %>%
+  mutate(type = "end") %>%
+  rename(chr = chr_y, start = start_y, stop = stop_y) %>%
+  makeGRangesFromDataFrame(keep.extra.columns = TRUE)
+
+# combine into one GRanges object and liftover to hg38
+loops_hg38 <- c(loop_starts, loop_ends) %>%
+  liftOver(chain = hg19_to_hg38_chain) %>%
+  unlist()
+
+# overlap loops with our region
+region_range_hg38 <- range(enh_coords_hg38)
+loops_regions <- subsetByOverlaps(loops_hg38, region_range)
+
+# get loop ids for loops that start and end in our region
+contacts <- table(loops_regions$loop)
+loop_names <- names(contacts)[contacts == 2]
+loops_regions <- loops_regions[loops_regions$loop %in% loop_names]
+
+# overlap loops with discovered enhancers
+enh_coords_hg38$enhancer <- names(enh_coords_hg38) %in% enh_gene_pairs$perturbation
+enhancers <- enh_coords_hg38
+enhancers$perturbation <- names(enhancers)
+loops_enh <- findOverlaps(query = loops_regions, subject = enhancers)
+
+# create GRanges with target gene TSSs
+target_genes <- disc_perts %>%
+  select(gene, gene_chr, gene_tss, gene_strand) %>%
+  distinct() %>%
+  rename(chr = gene_chr, strand = gene_strand, start = gene_tss) %>%
+  mutate(end = start, chr = paste0("chr", chr)) %>%
+  makeGRangesFromDataFrame(keep.extra.columns = TRUE)
+
+# get promoter regions
+promoters <- promoters(target_genes)
+
+# loops with target gene promoters
+loops_promoters <- findOverlaps(query = loops_regions, subject = promoters)
+
+# process overlapped loops
+enhancer_loops <- cbind(mcols(loops_regions[queryHits(loops_enh)]),
+                        mcols(enhancers[subjectHits(loops_enh)]))
+promoter_loops <- cbind(mcols(loops_regions[queryHits(loops_promoters)]),
+                        mcols(promoters[subjectHits(loops_promoters)]))
+                        
+# get loops that overlap both enhancers and promoters
+loop_interactions <- inner_join(as.data.frame(enhancer_loops), as.data.frame(promoter_loops),
+                                by = "loop")
+
+# only retain interactions that connect a start and an end of a loop
+loop_interactions <- filter(loop_interactions, type.x != type.y) %>%
+  select(-type.x, -enhancer, -type.y)
+
+# function to check if a perturbation - gene pair was detected as significant enhancer - gene pair
+is_enh_gene_pair <- function(perturbation, gene, de) {
+  hit <- de[de$perturbation == perturbation & de$gene == gene, ]
+  hit$pval_adj_allTests
+}
+
+# add variable to loop interactions that specifies whether that interaction was discovered as
+# significant enhancer - gene interaction
+loop_interactions <- loop_interactions %>%
+  rowwise() %>%
+  mutate(pval_adj_allTests = is_enh_gene_pair(perturbation, gene, de = disc_perts_cis)) %>%
+  mutate(significant = if_else(pval_adj_allTests < 0.05, true = "sig", false = "non_sig")) %>%
+  as.data.frame()
+
+knitr::kable(loop_interactions)
+```
+
+***
+
+# Source
+* <a download="map_enhancers.Rmd" href="`r base64enc::dataURI(file = params$rmd,
+    mime = 'text/rmd', encoding = 'base64')`">R Markdown source file (to produce this document)</a>
+    
