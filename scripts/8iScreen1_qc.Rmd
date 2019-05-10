@@ -183,7 +183,7 @@ ggplot(avg_genex_lanes, aes(x = name, y = avg_txs, color = name)) +
 ```{r pairwisePlots, fig.height=10, fig.width=10}
 # calculate log10 average gene expression and reformat
 avg_genex_log10 <- avg_genex_lanes %>%
-  mutate(avg_txs = log(avg_txs)) %>%
+  mutate(avg_txs = log10(avg_txs)) %>%
   spread(key = "name", value = "avg_txs")
 
 # plot pairwise correlations between 10x lanes
