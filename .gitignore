@@ -3,5 +3,7 @@
 .RData
 .Ruserdata
 .snakemake
-data/
+data/s
 results/
+cluster.yml
+snakehandler.sh
