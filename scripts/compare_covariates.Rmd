@@ -1,0 +1,582 @@
+---
+title: "Compare MAST covariates"
+author: "Andreas Gschwind"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+params:
+  rmd: "compare_covariates.Rmd"
+output:
+  bookdown::html_document2:
+    toc: yes
+---
+
+# Goal
+Principal components and number of detected genes are assessed as covariates for differential
+expression tests.
+
+```{css echo=FALSE}
+/* Define a margin before every image element */
+img {
+  margin-top: 3em;
+}
+```
+
+```{r setup, include=FALSE}
+# set global chunk options
+knitr::opts_chunk$set(echo = FALSE)
+
+# attach required packages
+library(corrplot)
+library(eulerr)
+library(factoextra)
+library(gridExtra)
+library(here)
+library(rtracklayer)
+library(tidyverse)
+```
+
+```{r loadData}
+# dge files
+dge_files <- here(snakemake@input$dge)
+names(dge_files) <- basename(dirname(dge_files))
+
+# load dge data
+dge <- lapply(dge_files, FUN = read.table, header = TRUE, row.names = "GENE")
+
+# differential expression results
+de_files <- here(snakemake@input$results)
+
+# extract relevant information from filenames
+de_files_info <- de_files %>%
+  sub(".*data/", "", .) %>%
+  sub("/diff_expr/output_", "_", .) %>%
+  sub("Covar.csv", "", .) %>%
+  sub("_no", "_none", .)
+
+# set names and load all de output files
+names(de_files) <- de_files_info
+de_results <- lapply(de_files, FUN = read.csv, stringsAsFactor = FALSE)
+
+# merge into one data.frame and reformat id variable
+de_results <- de_results %>%
+  bind_rows(.id = "id") %>%
+  separate(id, into = c("sample", "strategy", "covars"), sep = "_")
+
+# load target gene annotations
+annot <- lapply(here(snakemake@input$annot), FUN = import, format = "gtf")
+
+# merge into one GRangesList object, separated by genes 
+genes <- annot %>%
+  do.call("c", .) %>%
+  unique() %>%
+  split(f = .$gene_name)
+```
+
+***
+
+# PCA
+PCA is performed on gene expression for both chr11 and chr8. The variance explained per PC and the
+contribution of genes to PCs is then evaluated. Finally other meta data is corraleted with the PCs
+to investigate what they might represent.
+```{r fitPCA}
+# function to extract gene expression data from total dge
+extract_genex <- function(x, vector_pattern) {
+  gene_rows <- grep(rownames(x), pattern = vector_pattern, invert = TRUE)
+  x[gene_rows, ]
+}
+
+# function to remove dge data of cells from certain 10x lanes
+filter_lanes <- function(x, lanes) {
+  cells <- colnames(x)
+  cell_lanes <- substr(cells, start = 1, stop = 8)
+  cells_filt <- cells[!cell_lanes %in% lanes]
+  x[, cells_filt]
+}
+
+# 10x lanes excluded from DE tests
+rm_lanes <- unlist(snakemake@config$map_enhancers$remove_lanes)
+rm_lanes[rm_lanes == "none"] <- NA
+
+# extract gene expression data and filter for 10x lanes
+genex <- dge %>%
+  lapply(FUN = extract_genex, vector_pattern = snakemake@params$vector_pattern) %>%
+  mapply(FUN = filter_lanes, x = ., lanes = rm_lanes, SIMPLIFY = FALSE)
+
+# perform pca on gene expression data
+pca <- genex %>%
+  lapply(FUN = t) %>%
+  lapply(FUN = prcomp, scale. = TRUE)
+```
+
+```{r plotPCA, fig.width=8, fig.height=3.5}
+# quickly plot cell scores for first 2 principal components
+p1 <- fviz_pca_ind(pca$`11iScreen1`, geom = "point", title = "Chromosome 11", col.ind = "steelblue")
+p2 <- fviz_pca_ind(pca$`8iScreen1`, geom = "point", title = "Chromosome 8", col.ind = "steelblue")
+
+# print plots
+grid.arrange(p1, p2, ncol = 2)
+```
+
+## Variance explained
+```{r eigenvalues}
+# extract eigenvalues
+eig_val <- lapply(pca, FUN = get_eigenvalue)
+
+# process eigenvalues (top 20)
+eig_val_top20 <- eig_val %>%
+  lapply(FUN = rownames_to_column, var = "Dim") %>%
+  lapply(FUN = head, 20) %>%
+  bind_rows(.id = "sample") %>%
+  mutate(Dim = as.integer(sub("Dim\\.", "", Dim))) %>%
+  mutate(gt1 = if_else(eigenvalue > 1, true = ">1", false = "<=1"))
+
+# plot eigenvalues per PC
+ggplot(eig_val_top20, aes(x = factor(Dim), y = eigenvalue, fill = gt1)) +
+  facet_wrap(~sample, ncol = 1) +
+  geom_bar(stat = "identity") +
+  geom_hline(yintercept = 1, lty = "dashed", col = "firebrick2") +
+  labs(x = "PC", title = "Eigenvalues of top 30 PCs", fill = "eigenvalue") +
+  scale_fill_manual(values = c(">1" = "steelblue", "<=1" = "darkgray")) +
+  theme_bw()
+```
+
+The top 11, respectively top 10 PCs have Eigenvalues larger that 1, meaning they explain more
+variance than an individual variable, i.e. gene.
+
+```{r screePlot, fig.height = 7, fig.width=7}
+# scree plot showing percentage of variance explained per PC
+p1 <- fviz_eig(pca$`11iScreen1`, ncp = 11, addlabels = TRUE, ylim = c(0, 40), main = "Chr11")
+p2 <- fviz_eig(pca$`8iScreen1`, ncp = 10, addlabels = TRUE, ylim = c(0, 40), main = "Chr8")
+
+# get cummulative variance explained of top 11, resp 10 PCs
+cum_prop_chr11 <- filter(eig_val_top20, sample == "11iScreen1")[11, 5]
+cum_prop_chr8 <- filter(eig_val_top20, sample == "8iScreen1")[10, 5]
+
+# print plots
+grid.arrange(p1, p2, top = "Scree plots")
+```
+
+The top 10 PCs explain `r round(cum_prop_chr11, digits = 1)`% and
+`r round(cum_prop_chr8, digits = 1)`% of the total variance. Only PC1 explaines a substantial
+proportion of the overall variance.
+
+## Contribution of genes to PCs
+```{r corrCircle, fig.width=7, fig.height=5}
+# plot correlation circle
+p1 <- fviz_pca_var(pca$`11iScreen1`, col.var = "contrib", alpha.var = 0.5, title = "Genes chr11",
+                   gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"))
+p2 <- fviz_pca_var(pca$`8iScreen1`, col.var = "contrib", alpha.var = 0.5, title = "Genes chr8",
+                   gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"))
+
+grid.arrange(p1, p2, ncol = 2)
+```
+
+The genes are colored according to their contribution to PC1 and PC2. Most genes are positively
+correlated. HBE1, HBD and HBB seem to be behave differently.
+
+```{r contribChr11, fig.height=7, fig.width=10}
+# plot contribution of all genes to 
+p1 <- fviz_contrib(pca$`11iScreen1`, choice = "var", axes = 1,
+                   title = "Contribution of genes to PC1")
+p2 <- fviz_contrib(pca$`11iScreen1`, choice = "var", axes = 2,
+                   title = "Contribution of genes to PC2")
+
+grid.arrange(p1, p2, top = "Chromosome 11")
+```
+
+```{r contribChr8, fig.height=7, fig.width=10}
+# plot contribution of all genes to 
+p1 <- fviz_contrib(pca$`8iScreen1`, choice = "var", axes = 1,
+                   title = "Contribution of genes to PC1")
+p2 <- fviz_contrib(pca$`8iScreen1`, choice = "var", axes = 2,
+                   title = "Contribution of genes to PC2")
+
+grid.arrange(p1, p2, top = "Chromosome 8")
+```
+
+This plot shows the contribution of each gene to PC1 and PC2. PC2 appears to be driven strongly by
+expression of the hemoglobin genes HBD, HBE1 and HBB, and FAM83A.
+
+## Correlation of contribution
+```{r, contribVsGeneStats, fig.height=10, fig.width=6}
+# function to compute average expression, standard deviation and coefficient of variation
+gene_expr_stats <- function(gene_expr) {
+  avg_expr <- rowMeans(gene_expr)
+  sd_expr <- apply(gene_expr, MARGIN = 1, FUN = sd)
+  coeff_var <- sd_expr / avg_expr
+  
+  data.frame(avg_expr, sd_expr, coeff_var, check.rows = TRUE) %>%
+    rownames_to_column(var = "gene")
+}
+
+# compute gene expression stats for every gene in both samples and reformat
+gene_stats <- genex %>%
+  lapply(gene_expr_stats) %>%
+  bind_rows(.id = "sample") %>%
+  gather(key = "stat", value = "value", -sample, -gene)
+
+# extract contributions of genes to PCs 1 & 2 and reformat
+contrib <- pca %>%
+  lapply(FUN = function(x) get_pca_var(x)$contrib[,1:2]) %>%
+  lapply(FUN = as.data.frame) %>%
+  lapply(rownames_to_column, var = "gene") %>%
+  bind_rows(.id = "sample") %>%
+  rename(PC1 = Dim.1, PC2 = Dim.2) %>%
+  gather(key = "PC", value = "contribution", -sample, -gene)
+
+# add gene expression statistics to contributions
+contrib <- left_join(contrib, gene_stats, by = c("sample", "gene"))
+
+# plot correlation of contribution with gene stats for chromosome 11
+p1 <- contrib %>%
+  filter(sample == "11iScreen1", stat != "sd_expr") %>%
+  ggplot(., aes(x = value, y = contribution / 100)) +
+  facet_grid(PC~stat, scales = "free")+
+  geom_point(color = "steelblue") +
+  labs(x = "Value", y = "Contribution (%)", title = "Contribution vs. gene stats (chr11)") +
+  scale_y_log10(labels = scales::percent) +
+  scale_x_log10() +
+  theme_bw()
+  
+# plot correlation of contribution with gene stats for chromosome 8
+p2 <- contrib %>%
+  filter(sample == "8iScreen1", stat != "sd_expr") %>%
+  ggplot(., aes(x = value, y = contribution / 100)) +
+  facet_grid(PC~stat, scales = "free")+
+  geom_point(color = "steelblue") +
+  labs(x = "Value", y = "Contribution (%)", title = "Contribution vs. gene stats (chr8)") +
+  scale_y_log10(labels = scales::percent) +
+  scale_x_log10() +
+  theme_bw()
+
+# print plots
+grid.arrange(p1, p2, ncol = 1)
+```
+
+## Correlation of PCs with cell-level variables
+Variables based on gene expression data are computed for every cell. These variables are then
+correlated to the Principle components to estimate whether they drive them.
+
+```{r dgeStats}
+# function to compute interesting gene expression properties per cell
+cell_dge_stats <- function(dge, vector_pattern) {
+  
+  # separate dge into gene and vector expression
+  vctr_rows <- grep(rownames(dge), pattern = vector_pattern)
+  gene_expr <- dge[-vctr_rows, ]
+  vctr_expr <- dge[vctr_rows, ]
+  
+  # calculate stats
+  ngenes <- colSums(gene_expr > 0)
+  total_txs <- colSums(gene_expr)
+  
+  # calculate vector stats
+  total_vctr <- colSums(vctr_expr)
+  
+  data.frame(ngenes, total_txs, total_vctr, check.rows = TRUE) %>%
+    rownames_to_column(var = "cell") 
+}
+
+# calculate dge statistics per experiment
+cell_stats <- dge %>%
+  lapply(FUN = cell_dge_stats, vector_pattern = snakemake@params$vector_pattern) %>%
+  bind_rows(.id = "sample")
+```
+
+```{r corrCellStats}
+# function to correlate with cell level stats
+correlate_pcs <- function(x, method = "spearman") {
+  
+  # remove sample variable and make cell rownames
+  x <- select(x, -sample) %>%
+    `rownames<-`(NULL) %>%  # remove existing row names
+    column_to_rownames(var = "cell")
+  
+  # separate x into PCs and meta variables
+  pc_cols <- grep(colnames(x), pattern = "^PC")
+  pc_rot <- x[, pc_cols]
+  meta_vars <- x[, -pc_cols]
+  
+  # correlate pcas with meta vars
+  cor(pc_rot, meta_vars, method = method)
+  
+}
+
+# extract scores for first 5 PCs for both experiments
+pc_scores <- pca %>%
+  lapply(FUN = function(pca) as.data.frame(pca$x[, 1:5])) %>%
+  lapply(FUN = rownames_to_column, var = "cell") %>%
+  bind_rows(.id = "sample")
+
+# add cell level stats to pc_scores
+pc_scores_stats <- pc_scores %>%
+  left_join(cell_stats, by = c("sample", "cell"))
+
+# correlate PCs with cell-level stats
+corr_mats <- pc_scores_stats %>%
+  split(., f = .$sample) %>%
+  map(., .f = correlate_pcs)
+
+# create correlation plots
+layout(matrix(1:2, ncol = 2))
+corrplot(corr_mats$`11iScreen1`, title = "11iScreen1", mar=c(0,0,2,0), cl.align.text = "l",
+         cl.ratio = 0.5)
+corrplot(corr_mats$`8iScreen1`, title = "8iScreen1", mar=c(0,0,2,0), cl.align.text = "l",
+         cl.ratio = 0.5)
+```
+
+```{r PCScoresPlot}
+# plot first and second PC colored according to number of expressed genes
+p1 <- ggplot(pc_scores_stats, aes(x = PC1, y = PC2, color = ngenes)) +
+  facet_wrap(~sample) +
+  geom_point() +
+  labs(title = "Number of detected genes", color = "Genes") +
+  coord_fixed() +
+  theme_bw()
+
+# plot first and second PC colored according to number of gene transcripts
+p2 <- ggplot(pc_scores_stats, aes(x = PC1, y = PC2, color = total_txs)) +
+  facet_wrap(~sample) +
+  geom_point() +
+  labs(title = "Gene transcripts", color = "Transcripts") +
+  coord_fixed() +
+  theme_bw()
+
+# plot first and second PC colored according to number of vector transcripts
+p3 <- ggplot(pc_scores_stats, aes(x = PC1, y = PC2, color = log10(total_vctr))) +
+  facet_wrap(~sample) +
+  geom_point() +
+  labs(title = "Vector transcripts", color = "log10(Transcripts)") +
+  coord_fixed() +
+  theme_bw()
+
+# print plots
+p1
+p2
+p3
+```
+
+***
+
+# DE tests with covariates
+Differential expression analysis was performed with different sets ofcovariates:
+
+* No covariates
+* 1st PC
+* 1st and 2nd PC
+* Number of expressed genes
+
+```{r DEresults}
+# apply multiple testing correction per pc covar and strategy
+de_results <- de_results %>%
+  group_by(strategy, covars) %>%
+  rename(pval_adj_sample = pval_adj_allTests) %>%
+  mutate(pval_adj_allTests = p.adjust(pvalue, method = "fdr"))
+
+# extract perEnh hits
+enh_perts <- de_results %>%
+  filter(strategy == "perEnh") %>%
+  mutate(significant = if_else(pval_adj_allTests < 0.05, true = "sig", false = "not_sig"))
+
+# function to collapse gRNA ids per targeted enhancer
+collapse_grnas <- function(grnas) {
+  grnas <- sub("_.+", "", grnas)
+  sub("\\.[A|B|C|D]", "", grnas)
+}
+
+# count number of gRNA hits per enhancer-gene pair
+gRNA_hits <- de_results %>%
+  filter(strategy == "perGRNA") %>%
+  mutate(perturbation = collapse_grnas(perturbation)) %>%
+  group_by(sample, covars, perturbation, gene) %>%
+  summarize(grna_hits = sum(pval_adj_allTests < 0.05),
+            prop_grna_hits = mean(pval_adj_allTests < 0.05))
+
+# add single gRNA hits to enhancer hits
+enh_perts <- left_join(enh_perts, gRNA_hits, by = c("sample", "covars", "perturbation", "gene"))
+```
+
+## Consistency
+Sets of discovered enhancer - target gene pairs are compared among different covariate sets.
+```{r consistency}
+# get all significant hits and reformat to wide format, so that each row is one enhancer - target
+# gene link and "covariate columns" specify whether that associatiation was discovered or not
+pairs <- enh_perts %>%
+  ungroup() %>%
+  filter(significant == "sig") %>%
+  select(sample, covars, perturbation, gene) %>%
+  mutate(sig = 1) %>%
+  spread(key = covars, value = sig, fill = 0) %>%
+  mutate(total = rowSums(.[, -c(1:3)]))
+
+# compute euler diagrams
+euler_chr11 <- pairs %>%
+  filter(sample == "11iScreen1") %>%
+  select(-sample, -perturbation, -gene, -total) %>%
+  euler()
+
+euler_chr8 <- pairs %>%
+  filter(sample == "8iScreen1") %>%
+  select(-sample, -perturbation, -gene, -total) %>%
+  euler()
+
+# plot diagrams
+p1 <- plot(euler_chr11, quantities = TRUE, labels = list(font = 4), main = "Chromosome 11")
+p2 <- plot(euler_chr8, quantities = TRUE, labels = list(font = 4), main = "Chromosome 8")
+
+# print plots
+grid.arrange(p1, p2, ncol = 2)
+```
+
+```{r hitsPerConfidence}
+# calculate number of hits per confidence level
+hits_conf_levels <- enh_perts %>%
+  group_by(sample, covars, grna_hits) %>%
+  summarize(hits = sum(pval_adj_allTests < 0.05))
+
+# plot number of hits per confidence level
+ggplot(hits_conf_levels, aes(x = as.factor(grna_hits), y = hits, fill = as.factor(covars))) +
+  facet_wrap(~sample) +
+  geom_bar(stat = "identity", position = "dodge") + 
+  labs(x = "Individual gRNA hits", y = "Significant hits", title = "Confidence level",
+       fill = "PC covariates") +
+  theme_bw()
+```
+
+```{r nocovarOnlyHits}
+# get hits that are found only in one unique test
+unique_pairs <- pairs %>%
+  right_join(enh_perts, by = c("sample", "perturbation", "gene")) %>%
+  filter(total == 1)
+
+# calculate number of hits per confidence level
+unique_hits <- unique_pairs %>%
+  group_by(sample, covars, grna_hits) %>%
+  summarize(hits = sum(pval_adj_allTests < 0.05))
+
+# plot confidence levels for these hits
+ggplot(unique_hits, aes(x = factor(grna_hits), y = hits, fill = covars)) +
+  facet_wrap(~sample) +
+  geom_bar(stat = "identity", position = "dodge") + 
+  labs(x = "Individual gRNA hits", y = "Significant hits",
+       title = "Confidence of hits unique to one model", fill = "PC covariates") +
+  theme_bw()
+```
+
+## Distance to TSS
+The distance of every perturbed enhancer to each tested gene is calculated. Signficance of
+associations is then plotted as a function of distance to TSS. This can serve as a QC measurement,
+as we can expect that the strongest associations are located close to the TSS of their target genes.
+```{r importChain}
+# download chain file for hg19 to hg38 liftover
+chain_url <- "http://hgdownload.soe.ucsc.edu/gbdb/hg19/liftOver/hg19ToHg38.over.chain.gz"
+chain_file <- tempfile("hg19ToHg38", fileext = ".gz")
+download.file(chain_url, chain_file)
+system(paste("gunzip", chain_file))
+
+# import chain file
+hg19_to_hg38_chain <- import.chain(tools::file_path_sans_ext(chain_file))
+```
+
+```{r enhCoords}
+# extract data on discovery perturbations
+disc_perts <- enh_perts %>%
+  filter(grepl(perturbation, pattern = "^chr.+$")) %>%
+  as.data.frame()
+
+# extract enhancer coordinates from perturbation id and create GRanges object
+enh_coords_hg19 <- disc_perts %>%
+  select(perturbation) %>%
+  distinct() %>%
+  separate(perturbation, into = c("chr", "start", "end"), remove = FALSE) %>%
+  column_to_rownames(var = "perturbation") %>%
+  makeGRangesFromDataFrame()
+
+# liftover from hg19 to hg38
+enh_coords_hg38 <- enh_coords_hg19 %>%
+  liftOver(chain = hg19_to_hg38_chain) %>%
+  unlist()
+
+# compute center of every enhancer
+enh_centers <- data.frame(perturbation = names(enh_coords_hg38),
+                          enh_chr = sub("chr", "", as.character(seqnames(enh_coords_hg38))),
+                          enh_center = round((start(enh_coords_hg38) + end(enh_coords_hg38)) / 2),
+                          stringsAsFactors = FALSE)
+
+# add enhancer centers to de results
+disc_perts <- disc_perts %>%
+  left_join(enh_centers, by = "perturbation")
+```
+
+```{r calcDistToTSS}
+# get chromosome and strand for each gene
+gene_chr <- unlist(unique(seqnames(genes)))
+gene_strand <- unlist(unique(strand(genes)))
+
+# function to get a genes TSS
+get_tss <- function(x) {
+  if (all(strand(x) == "+")) {
+    min(start(x))
+  }else if (all(strand(x) == "-")) {
+    max(end(x))
+  }else{
+    stop("Inconsistent strand information!")
+  }
+}
+
+# get TSS for each gene
+gene_tss <- sapply(genes, FUN = get_tss)
+
+# create data.frame with strand and tss coordinates for every gene
+tss_coords <- data.frame(gene_chr, gene_strand, gene_tss, check.rows = TRUE) %>%
+  rownames_to_column(var = "gene") %>%
+  mutate_if(is.factor, as.character)
+
+# add to discovery perturbation results
+disc_perts <- left_join(disc_perts, tss_coords, by = "gene")
+
+# calculate distance to tss for every enhancer - gene pair
+disc_perts <- disc_perts %>%
+  mutate(dist_to_tss = if_else(gene_strand == "+",
+                               true  = enh_center - gene_tss,
+                               false = gene_tss - enh_center))
+
+# only retain enhancer - gene pairs on the same chromosomes
+disc_perts_cis <- filter(disc_perts, enh_chr == gene_chr)
+```
+
+```{r distTssVsPval}
+# calculate -log10 p-value
+disc_perts_cis <- mutate(disc_perts_cis, neg_log10_pvalue = -log10(pvalue))
+
+# plot -log10 p-value as a function of distance to TSS
+ggplot(disc_perts_cis,
+             aes(x = dist_to_tss / 1e6, y = neg_log10_pvalue, color = prop_grna_hits)) +
+  facet_grid(covars~sample) +
+  geom_point(data = filter(disc_perts_cis, significant == "not_sig")) +
+  geom_point(data = filter(disc_perts_cis, significant == "sig")) +
+  labs(x = "Distance to TSS (Mb)", y = expression(-log[10] ~ p - value),
+       title = "-Log10 p-value vs distance to TSS") +
+  scale_color_gradient(low = "blue", high = "orangered") +
+  theme_bw()
+```
+
+```{r distTssVsConf}
+# only select significant enhancer - gene pairs
+enh_gene_pairs <- filter(disc_perts_cis, significant == "sig")
+
+# plot the distance to TSS vs number of gRNA hits
+ggplot(enh_gene_pairs, aes(x = as.factor(grna_hits), y = abs(dist_to_tss) / 1000, color = sample)) +
+  facet_wrap(~covars, ncol = 2) +
+  geom_point(position = position_jitterdodge()) +
+  geom_boxplot(outlier.shape = NA, fill = NA) +
+  labs(x = "Confidence level (gRNA hits)", y = "Distance to TSS (kb)",
+       title = "Distance to TSS vs. confidence level") +
+  scale_y_log10() +
+  theme_bw()
+```
+
+***
+
+# Source
+* <a download="compare_covariates.Rmd" href="`r base64enc::dataURI(file = params$rmd,
+    mime = 'text/rmd', encoding = 'base64')`">R Markdown source file (to produce this document)</a>
