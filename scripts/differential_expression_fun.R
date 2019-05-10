@@ -115,16 +115,16 @@ test_differential_expression <- function(object, min_cells = 25, parallel = FALS
 #' Any other columns in colData will ne ignored, because DEsingle currently does not support
 #' covariates.
 #'
-#' @param object SingleCellExperiment object containing gene expression data and cell groupings in
+#' @param pert_object SingleCellExperiment object containing gene expression data and cell groupings in
 #'   colData. The perturbation to be tested is assumed to be the first column in colData!
-de_DEsingle <- function(object) {
+de_DEsingle <- function(pert_object) {
   
   # normalize data using censored mean normalization
-  counts <- assay(object, "counts")
+  counts <- assay(pert_object, "counts")
   norm_counts <- normalize_cens_mean(counts, percentile = 0.9, norm_counts = TRUE)
   
   # get identity for each cell and make sure it's a factor
-  groups <- colData(object)[, 1]
+  groups <- colData(pert_object)[, 1]
   groups <- as.factor(groups)
   levels(groups) <- c(0, 1)
   
@@ -146,21 +146,21 @@ de_DEsingle <- function(object) {
 #' Any other columns in colData will be used as covariates during modelling, but only the
 #' perturbation will be tested for signficance.
 #'
-#' @param object SingleCellExperiment object containing gene expression data and cell groupings in
+#' @param pert_object SingleCellExperiment object containing gene expression data and cell groupings in
 #'   colData. The perturbation to be tested is assumed to be the first column in colData!
-de_MAST <- function(object) {
+de_MAST <- function(pert_object) {
   
   # normalize data using censored mean normalization with log1p as scale function
-  counts <- assay(object, "counts")
+  counts <- assay(pert_object, "counts")
   logcounts <- normalize_cens_mean(counts, percentile = 0.9, norm_counts = FALSE, scale_fun = log1p)
-  assay(object, "logcounts") <- logcounts
+  assay(pert_object, "logcounts") <- logcounts
   
   # add some row- and colData expected by MAST
-  rowData(object) <- cbind(rowData(object), primerid = rownames(object))
-  colData(object) <- cbind(colData(object), wellKey = colnames(object))
+  rowData(pert_object) <- cbind(rowData(pert_object), primerid = rownames(pert_object))
+  colData(pert_object) <- cbind(colData(pert_object), wellKey = colnames(pert_object))
   
-  # coerce object to SingleCellAssay, since MAST requires that as input
-  sca <- SceToSingleCellAssay(object)
+  # coerce pert_object to SingleCellAssay, since MAST requires that as input
+  sca <- SceToSingleCellAssay(pert_object)
   
   # prepare colData for model fitting
   colnames(colData(sca))[1] <- "pert"  # make sure 1st column is called pert for coeff testing
@@ -174,19 +174,23 @@ de_MAST <- function(object) {
   model <- paste0("~", paste(vars_to_test, collapse = "+"))
   zlm_fit <- zlm(as.formula(model), sca)
   
-  # perform likelihood ratio test for pert and extract summary data
-  summary_zlm_fit <- summary(zlm_fit, logFC = TRUE, doLRT = "pert1")
+  # following command throws warning with MAST v1.8.1, so lrt test is performed separately
+  # summary_zlm_fit <- summary(zlm_fit, logFC = TRUE, doLRT = "pert1")
+  
+  # get logFC change for the perturbation coefficient
+  summary_zlm_fit <- summary(zlm_fit, logFC = TRUE)
   summary_dt <- summary_zlm_fit$datatable
-  
-  # extract relevant data to assess significance and effect size of the perturbation
-  pval  <- summary_dt[contrast == "pert1" & component == "H", .(primerid, `Pr(>Chisq)`)]
   logFC <- summary_dt[contrast == "pert1" & component == "logFC", .(primerid, coef, ci.hi, ci.lo)]
-  output <- merge(pval, logFC, by = "primerid")
   
-  # reformat and return output
-  colnames(output) <- c("gene", "pvalue", "logFC", "ci_high", "ci_low")
-  output <- data.frame(output, stringsAsFactors = FALSE, row.names = NULL)
-  output[order(output$pval), ]
+  # perform likelihood ratio test for the perturbation coefficient
+  lrt <- as.data.frame(lrTest(zlm_fit, CoefficientHypothesis("pert1")))
+  lrt_output <- data.frame(primerid = rownames(lrt), pvalue = lrt[, "hurdle.Pr(>Chisq)"],
+                           row.names = rownames(lrt), stringsAsFactors = FALSE)
+  
+  # assemble and return output
+  output <- merge(as.data.frame(logFC), lrt_output, by = "primerid")
+  colnames(output) <- c("gene", "logFC", "ci_high", "ci_low", "pvalue")
+  output[order(output$pvalue), ]
   
 }
 
@@ -194,16 +198,16 @@ de_MAST <- function(object) {
 #' 
 #' Simple calculation of log-fold changes in gene expression between perturbed and control cells.
 #' 
-#' @param object SingleCellExperiment object containing gene expression data (counts) and cell
+#' @param pert_object SingleCellExperiment object containing gene expression data (counts) and cell
 #'   groupings in colData. The perturbation to be tested is assumed to be the first column in
 #'   colData!
 #' @param pseudocount Pseudocount to be added to transcript counts when calculating average gene
 #'   expression.
-de_LFC <- function(object, pseudocount = 1) {
+de_LFC <- function(pert_object, pseudocount = 1) {
   
   # get raw counts and groups for each cell
-  counts <- assay(object, "counts")
-  groups <- colData(object)[,1]
+  counts <- assay(pert_object, "counts")
+  groups <- colData(pert_object)[,1]
   
   # calculate average expression for each gene (with pseudocount)
   pert_avg <- rowMeans(counts[, groups == 1] + pseudocount)
@@ -266,4 +270,5 @@ test_de <- function(pert, object, cell_lanes, method, n_ctrl = 1000) {
       message("For perturbation ", pert, ": ", e)
       return(NULL)
     })
+  
 }

@@ -24,11 +24,10 @@ if (snakemake@params$seed > 0) set.seed(snakemake@params$seed)
 # prepare input data ===============================================================================
 
 # load DGE data
-dge <- read.table(snakemake@input$dge, header = TRUE, stringsAsFactors = FALSE, row.names = "GENE")
+dge <- read.table(snakemake@input$dge, header = TRUE, row.names = "GENE")
 
 # load perturbation status data
-perturb_status <- read.table(snakemake@input$perturb_status, header = TRUE,
-                             stringsAsFactors = FALSE, row.names = 1)
+perturb_status <- read.table(snakemake@input$perturb_status, header = TRUE, row.names = 1)
 
 # remove negative controls, as these are not supposed to be tested
 neg_ctrls <- grep(rownames(perturb_status), pattern = "^non-targeting.*$", perl = TRUE)
@@ -56,11 +55,29 @@ if (all(snakemake@params$exclude_lanes != "none")) {
   
 }
 
-# perform PCA on gene expression data, extract PC loadings, and add as colData to use as covariates
-pca_genex <- prcomp(t(assay(sce)), scale. = TRUE)
-pcs <- seq_len(as.integer(snakemake@wildcards$npcs))
-pc_loadings <- DataFrame(pca_genex$x[, pcs])
-colData(sce) <- pc_loadings
+# add covariates ===================================================================================
+
+# covariates specified via output file name
+covars <- snakemake@wildcards$covars
+
+# compute covariates and add as colData to the SingleCellExperiment object
+if (covars == "nGenesCovar") {
+  
+  # number of expressed genes per cell
+  nGenes <- colSums(assay(sce) > 0)
+  colData(sce) <- DataFrame(nGenes)
+  
+}else if (grepl(covars, pattern = "^\\d+pcCovar$", perl = TRUE)) {
+  
+  # perform PCA on gene expression data and extract PC scores of each cell
+  pca_genex <- prcomp(t(assay(sce)), scale. = TRUE)
+  pcs <- seq_len(as.integer(sub("pcCovar", "", covars)))
+  pc_loadings <- DataFrame(pca_genex$x[, pcs])
+  colData(sce) <- pc_loadings
+  
+}else if (covars != "noCovar") {
+  stop("Incorrect covariate wildcard!", call. = FALSE)
+}
 
 # perform DE tests =================================================================================
 
