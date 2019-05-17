@@ -198,16 +198,31 @@ rule compare_covariates:
   script:
     "../scripts/compare_covariates.Rmd"
     
-# perform all differential gene expression tests to map enhancers for both chr11 and chr8 screens
+# process de results and calculate useful stats such as confidence levels and distance to TSS.
+# generates input files for detailed enhancer analyses
+rule process_de_results:
+  input:
+    results = expand("data/{sample}/diff_expr/output_{strategy}_{{covars}}.csv",
+      sample = config["screen"], strategy = ["perEnh", "perGRNA"]),
+    annot = ["meta_data/target_genes_chr8_screen.gtf", "meta_data/target_genes_chr11_screen.gtf"],
+    enh_coords = ["meta_data/enhancers_chr8_screen.bed", "meta_data/enhancers_chr11_screen.bed"]
+  output:
+    "data/diff_expr_screen_{covars}.csv"
+  params:
+    confidence_fdr = 0.05  # fdr threshold for single gRNA hits used to assign confidence levels
+  conda: "../envs/r_map_enhancers.yml"
+  script:
+    "../scripts/process_de_results.R"
+    
+# perform basic analyses of differential expression results and enhancer - target gene pairs.
 rule map_enhancers:
   input:
-    results = expand("data/{sample}/diff_expr/output_{strategy}_nGenesCovar.csv",
+    de_output = expand("data/{sample}/diff_expr/output_{strategy}_nGenesCovar.csv",
       sample = config["screen"], strategy = ["perEnh", "perGRNA"]),
     ncells = expand("data/{sample}/diff_expr/ncells_{strategy}_nGenesCovar.csv",
       sample = config["screen"], strategy = ["perEnh", "perGRNA"]),
-    dge = ["data/8iScreen1/dge.txt", "data/11iScreen1/dge.txt"],
-    annot = ["meta_data/target_genes_chr8_screen.gtf",
-      "meta_data/target_genes_chr11_screen.gtf"]
+    processed_results = "data/diff_expr_screen_nGenesCovar.csv",
+    dge = ["data/8iScreen1/dge.txt", "data/11iScreen1/dge.txt"]
   output:
     "results/map_enhancers.html"
   params:
