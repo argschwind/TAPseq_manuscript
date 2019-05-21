@@ -43,6 +43,7 @@ enh_coords <- here(snakemake@input$enh_coords) %>%
 
 colnames(enh_coords) <- c("chr", "start", "end", "name", "score", "strand")
 
+
 # FDR and confidence levels ------------------------------------------------------------------------
 
 # correct for multiple testing across samples using FDR
@@ -72,15 +73,15 @@ gRNA_hits <- results %>%
 enh_perts <- left_join(enh_perts, gRNA_hits, by = c("sample", "perturbation", "gene"))
 
 
-# distance to TSS ----------------------------------------------------------------------------------
+# add enhancer and gene TSS coordinates ------------------------------------------------------------
 
 # compute center of every enhancer
 enh_centers <- enh_coords %>%
   mutate(enh_center = round((start + end) / 2)) %>%
-  select(name, chr, enh_center) %>%
+  select(name, chr, start, end, enh_center) %>%
   mutate(name = gsub(":|-", ".", name),
          chr = sub("chr", "", chr)) %>%
-  rename(enh_chr = chr)
+  rename(enh_chr = chr, enh_start = start, enh_end = end)
 
 # add enhancer centers to de results
 enh_perts <- enh_perts %>%
@@ -105,12 +106,15 @@ get_tss <- function(x) {
 gene_tss <- sapply(genes, FUN = get_tss)
 
 # create data.frame with strand and tss coordinates for every gene
-tss_coords <- data.frame(gene_chr, gene_strand, gene_tss, check.rows = TRUE) %>%
+tss_coords <- data.frame(gene_chr, gene_tss, gene_strand, check.rows = TRUE) %>%
   rownames_to_column(var = "gene") %>%
   mutate_if(is.factor, as.character)
 
 # add to discovery perturbation results
 enh_perts <- left_join(enh_perts, tss_coords, by = "gene")
+
+
+# add distance to TSS for cis associations ---------------------------------------------------------
 
 # add type for cis or trans enhancer interactions
 enh_perts <- enh_perts %>%
@@ -125,8 +129,7 @@ enh_perts <- enh_perts %>%
                                false = as.numeric(NA)))
 
 # reformat for output
-enh_perts <- enh_perts %>%
-  select(-c(enh_chr, enh_center, gene_chr, gene_strand, gene_tss))
+enh_perts <- select(enh_perts, -enh_center)
 
 # save processed output to file
 write.csv(enh_perts, file = here(snakemake@output), row.names = FALSE)
