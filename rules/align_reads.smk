@@ -21,50 +21,30 @@ rule fastq_to_bam:
     unpack(get_fastq_files)
   output:
     temp("data/{sample}/unmapped.bam")
-  log:
-    "data/{sample}/logs/fastq_to_bam.log"
-  conda:
-    "../envs/dropseq_tools.yml"
+  log: "data/{sample}/logs/fastq_to_bam.log"
+  conda: "../envs/dropseq_tools.yml"
   shell:
     "picard FastqToSam "
     "FASTQ={input.fastq1} "
     "FASTQ2={input.fastq2} "
     "OUTPUT={output} "
     "SAMPLE_NAME={wildcards.sample} "
-    "2> {log}"
-
-# make sure that input is sorted according to query name
-rule sort_unmapped:
-  input:
-    "data/{sample}/unmapped.bam"
-  output:
-    temp("data/{sample}/sorted_unmapped.bam")
-  log:
-    "data/{sample}/logs/sort_unmapped.log"
-  conda:
-    "../envs/dropseq_tools.yml"
-  shell:
-    "picard SortSam "
-    "INPUT={input} "
-    "OUTPUT={output} "
     "SORT_ORDER=queryname "
     "2> {log}"
 
 # tag genome reads with CELL barcodes
 rule tag_cell_barcodes:
   input:
-    "data/{sample}/sorted_unmapped.bam"
+    "data/{sample}/unmapped.bam"
   output:
     bam = temp("data/{sample}/cell_tagged_unmapped.bam"),
     summary = "data/{sample}/cell_tags_summary.txt"
-  log:
-    "data/{sample}/logs/tag_cell_barcodes.log"
   params:
     base_range = lambda wildcards: config["bc_structure"][wildcards.sample][0],
     base_qual = config["tag_cell_barcodes"]["base_quality"],
     bases_below_qual = config["tag_cell_barcodes"]["num_bases_below_quality"]
-  conda:
-    "../envs/dropseq_tools.yml"
+  log: "data/{sample}/logs/tag_cell_barcodes.log"
+  conda: "../envs/dropseq_tools.yml"
   shell:
     "TagBamWithReadSequenceExtended "
     "INPUT={input} "
@@ -85,14 +65,12 @@ rule tag_molecule_barcodes:
   output:
     bam = temp("data/{sample}/mol_tagged_unmapped.bam"),
     summary = "data/{sample}/mol_tags_summary.txt"
-  log:
-    "data/{sample}/logs/tag_molecule_barcodes.log"
   params:
     base_range = lambda wildcards: config["bc_structure"][wildcards.sample][1],
     base_qual = config["tag_cell_barcodes"]["base_quality"],
     bases_below_qual = config["tag_cell_barcodes"]["num_bases_below_quality"]
-  conda:
-    "../envs/dropseq_tools.yml"
+  log: "data/{sample}/logs/tag_molecule_barcodes.log"
+  conda: "../envs/dropseq_tools.yml"
   shell:
     "TagBamWithReadSequenceExtended "
     "INPUT={input} "
@@ -112,10 +90,8 @@ rule filter_bam:
     "data/{sample}/mol_tagged_unmapped.bam"
   output:
     temp("data/{sample}/filt_unmapped.bam")
-  log:
-    "data/{sample}/logs/filter_bam.log"
-  conda:
-    "../envs/dropseq_tools.yml"
+  log: "data/{sample}/logs/filter_bam.log"
+  conda: "../envs/dropseq_tools.yml"
   shell:
     "FilterBAM "
     "INPUT={input} "
@@ -130,14 +106,12 @@ rule trim_starting_sequence:
   output:
     bam = temp("data/{sample}/adapter_trimmed_unmapped.bam"),
     summary = "data/{sample}/adapter_trimming_report.txt"
-  log:
-    "data/{sample}/logs/trim_starting_sequence.log"
   params:
     adapter_sequence = config["trim_starting_sequence"]["adapter_sequence"],
     mismatches = config["trim_starting_sequence"]["mismatches"],
     num_bases = config["trim_starting_sequence"]["num_bases"]
-  conda:
-    "../envs/dropseq_tools.yml"
+  log: "data/{sample}/logs/trim_starting_sequence.log"
+  conda: "../envs/dropseq_tools.yml"
   shell:
     "TrimStartingSequence "
     "INPUT={input} "
@@ -155,13 +129,11 @@ rule trim_polyA:
   output:
     bam = temp("data/{sample}/polyA_trimmed_unmapped.bam"),
     summary = "data/{sample}/polyA_trimming_report.txt"
-  log:
-    "data/{sample}/logs/trim_polyA.log"
   params:
     mismatches = config["trim_polyA"]["mismatches"],
     num_bases = config["trim_polyA"]["num_bases"]
-  conda:
-    "../envs/dropseq_tools.yml"
+  log: "data/{sample}/logs/trim_polyA.log"
+  conda: "../envs/dropseq_tools.yml"
   shell:
     "PolyATrimmer "
     "INPUT={input} "
@@ -176,11 +148,9 @@ rule sam_to_fastq:
   input:
     "data/{sample}/polyA_trimmed_unmapped.bam"
   output:
-    temp("data/{sample}/polyA_trimmed_unmapped.fastq")
-  log:
-    "data/{sample}/logs/sam_to_fastq.log"
-  conda:
-    "../envs/dropseq_tools.yml"
+    temp("data/{sample}/polyA_trimmed_unmapped.fastq.gz")
+  log: "data/{sample}/logs/sam_to_fastq.log"
+  conda: "../envs/dropseq_tools.yml"
   shell:
     "picard SamToFastq "
     "INPUT={input} "
@@ -190,22 +160,21 @@ rule sam_to_fastq:
 # align reads using STAR
 rule star_align:
   input:
-    fastq = "data/{sample}/polyA_trimmed_unmapped.fastq",
+    fastq = "data/{sample}/polyA_trimmed_unmapped.fastq.gz",
     genomedir = lambda wildcards: config["align_ref"][wildcards.sample] + "/genomeDir"
   output:
     temp("data/{sample}/star.Aligned.out.bam"),
     "data/{sample}/star.Log.final.out"
   params:
     outprefix = "data/{sample}/star."
-  threads:
-    config["star_align"]["threads"]
-  conda:
-    "../envs/dropseq_tools.yml"
+  threads: config["star_align"]["threads"]
+  conda: "../envs/dropseq_tools.yml"
   shell:
     "STAR --runThreadN {threads} "
     "--genomeDir {input.genomedir} "
     "--readFilesIn {input.fastq} "
     "--outFileNamePrefix {params.outprefix} "
+    "--readFilesCommand zcat "
     "--outSAMtype BAM Unsorted ; "
     # move STAR "progress" logs into log directory
     "mv data/{wildcards.sample}/star.Log.progress.out "
@@ -219,10 +188,8 @@ rule sort_aligned:
     "data/{sample}/star.Aligned.out.bam"
   output:
     temp("data/{sample}/star.Aligned.sorted.bam")
-  log:
-    "data/{sample}/logs/sort_aligned.log"
-  conda:
-    "../envs/dropseq_tools.yml"
+  log: "data/{sample}/logs/sort_aligned.log"
+  conda: "../envs/dropseq_tools.yml"
   shell:
     "picard SortSam "
     "INPUT={input} "
@@ -240,10 +207,8 @@ rule merge_bam:
     dict = lambda wildcards: config["align_ref"][wildcards.sample] + "/cropseq_ref.dict"
   output:
     temp("data/{sample}/merged_aligned.bam")
-  log:
-    "data/{sample}/logs/merge_bam.log"
-  conda:
-    "../envs/dropseq_tools.yml"
+  log: "data/{sample}/logs/merge_bam.log"
+  conda: "../envs/dropseq_tools.yml"
   shell:
     "picard MergeBamAlignment "
     "ALIGNED_BAM={input.aligned} "
@@ -260,33 +225,17 @@ rule tag_with_gene_exon:
     bam = "data/{sample}/merged_aligned.bam",
     annot = lambda wildcards: config["align_ref"][wildcards.sample] + "/cropseq_ref.refFlat"
   output:
-    protected("data/{sample}/gene_tagged_aligned.bam")
-  log:
-    "data/{sample}/logs/tag_with_gene_exon.log"
-  conda:
-    "../envs/dropseq_tools.yml"
+    bam = protected("data/{sample}/gene_tagged_aligned.bam"),
+    bai = "data/{sample}/gene_tagged_aligned.bai"
+  log: "data/{sample}/logs/tag_with_gene_exon.log"
+  conda: "../envs/dropseq_tools.yml"
   shell:
     "TagReadWithGeneExon "
     "INPUT={input.bam} "
-    "OUTPUT={output} "
+    "OUTPUT={output.bam} "
     "ANNOTATIONS_FILE={input.annot} "
     "TAG=GE "
-    "2> {log}"
-    
-# create index file for final bam file
-rule create_bam_index:
-  input:
-    "data/{sample}/gene_tagged_aligned.bam"
-  output:
-    "data/{sample}/gene_tagged_aligned.bai"
-  log:
-    "data/{sample}/logs/create_bam_index.log"
-  conda:
-    "../envs/dropseq_tools.yml"
-  shell:
-    "picard BuildBamIndex "
-    "INPUT={input} "
-    "OUTPUT={output} "
+    "CREATE_INDEX=true "
     "2> {log}"
 
 # calculate reads per cell barcode
@@ -297,10 +246,8 @@ rule reads_per_cell:
     "data/{sample}/reads_per_cell_barcode.txt"
   params:
     read_quality = config["reads_per_cell"]["read_quality"]
-  log:
-    "data/{sample}/logs/reads_per_cell.log"
-  conda:
-    "../envs/dropseq_tools.yml"
+  log: "data/{sample}/logs/reads_per_cell.log"
+  conda: "../envs/dropseq_tools.yml"
   shell:
     "BAMTagHistogram "
     "INPUT={input} "
@@ -317,14 +264,12 @@ rule align_report:
     star_smry = "data/{sample}/star.Log.final.out",
     adapt_trim = "data/{sample}/adapter_trimming_report.txt",
     polyA_trim = "data/{sample}/polyA_trimming_report.txt",
-    reads_per_cell = "data/{sample}/reads_per_cell_barcode.txt",
-    bai = "data/{sample}/gene_tagged_aligned.bai"  # not input, just to complete alignment workflow
+    reads_per_cell = "data/{sample}/reads_per_cell_barcode.txt"
   output:
     "results/alignment/{sample}_align_report.html"
   params:
     expect_cells = lambda wildcards: config["expect_cell_numbers"][wildcards.sample],
     bc_structure = lambda wildcards: config["bc_structure"][wildcards.sample]
-  conda:
-    "../envs/r_dropseq_tools.yml"
+  conda: "../envs/r_dropseq_tools.yml"
   script:
     "../scripts/align_report.Rmd"

@@ -5,15 +5,14 @@
 # workflow rules -----------------------------------------------------------------------------------
 rule download_genome_annot:
   output:
-    fasta = temp("data/genome_reference/genome.fasta"),
-    gtf = temp("data/genome_reference/genome.gtf")
+    fasta = temp("data/genome_{ref_version}/genome.fasta"),
+    gtf = temp("data/genome_{ref_version}/genome.gtf")
   params:
     fasta_url = config["download_genome_annot"]["fasta_url"],
     gtf_url = config["download_genome_annot"]["gtf_url"]
-  log:
-    "data/genome_reference/logs/download_genome_annot.log"
-  conda:
-    "../envs/dropseq_tools.yml"
+  log: "data/genome_{ref_version}/logs/download_genome_annot.log"
+  conda: "../envs/dropseq_tools.yml"
+  group: "align_ref"
   shell:
     "wget -O {output.gtf}.gz {params.gtf_url} 2> {log} && gzip -d {output.gtf}.gz ; "
     "wget -O {output.fasta}.gz {params.fasta_url} 2>> {log} && gzip -d {output.fasta}.gz"
@@ -24,12 +23,11 @@ rule create_tapseq_annot:
   output:
     fasta = temp("data/{align_ref}/genome.fasta"),
     gtf = temp("data/{align_ref}/genome.gtf")
-  log:
-    "data/{align_ref}/logs/create_tapseq_ref.log"
   params:
     BSgenome = config["create_tapseq_ref"]["BSgenome_id"]
-  conda:
-    "../envs/r_alignment_ref.yml"
+  log: "data/{align_ref}/logs/create_tapseq_ref.log"
+  conda: "../envs/r_alignment_ref.yml"
+  group: "align_ref"
   shell:
     "Rscript scripts/create_tapseq_annot.R -t {input} -b {params.BSgenome} -f {output.fasta} "
     "-o {output.gtf} 2> {log}"
@@ -43,8 +41,8 @@ rule create_vector_ref:
   params:
     output_bn = "data/{align_ref}/cropseq_vectors",
     vector_prefix = config["create_vector_ref"]["vector_prefix"]
-  conda:
-    "../envs/dropseq_tools.yml"
+  conda: "../envs/dropseq_tools.yml"
+  group: "align_ref"
   shell:
     "python scripts/cropseq_vector_reference.py -i {input} -o {params.output_bn} "
     "--prefix {params.vector_prefix}"
@@ -58,8 +56,8 @@ rule create_cropseq_ref:
   output:
     cropseq_ref_fasta = "data/{align_ref}/cropseq_ref.fasta",
     cropseq_ref_gtf = "data/{align_ref}/cropseq_ref.gtf"
-  conda:
-    "../envs/dropseq_tools.yml"
+  conda: "../envs/dropseq_tools.yml"
+  group: "align_ref"
   shell:
     "cat {input.genome_gtf} > {output.cropseq_ref_gtf} && "
     "cat {input.vectors_gtf} >> {output.cropseq_ref_gtf} ; "
@@ -71,10 +69,9 @@ rule create_dict:
     "data/{align_ref}/cropseq_ref.fasta"
   output:
     "data/{align_ref}/cropseq_ref.dict"
-  log:
-    "data/{align_ref}/logs/create_dict.log"
-  conda:
-    "../envs/dropseq_tools.yml"
+  log: "data/{align_ref}/logs/create_dict.log"
+  conda: "../envs/dropseq_tools.yml"
+  group: "align_ref"
   shell:
     "picard CreateSequenceDictionary "
     "REFERENCE={input} "
@@ -87,10 +84,9 @@ rule create_refflat:
     seq_dict = "data/{align_ref}/cropseq_ref.dict"
   output:
     "data/{align_ref}/cropseq_ref.refFlat"
-  log:
-    "data/{align_ref}/logs/create_refflat.log"
-  conda:
-    "../envs/dropseq_tools.yml"
+  log: "data/{align_ref}/logs/create_refflat.log"
+  conda: "../envs/dropseq_tools.yml"
+  group: "align_ref"
   shell:
     "ConvertToRefFlat "
     "ANNOTATIONS_FILE={input.annot} "
@@ -104,14 +100,12 @@ rule create_genomedir:
     gtf = "data/{align_ref}/cropseq_ref.gtf"
   output:
     directory("data/{align_ref}/genomeDir")
-  log:
-    "data/{align_ref}/logs/create_genomedir.log"
   params:
     outprefix = "data/{align_ref}/star.",
     sjdb_overhang = config["create_genomedir"]["sjdb_overhang"]
+  log: "data/{align_ref}/logs/create_genomedir.log"
   threads: config["create_genomedir"]["threads"]
-  conda:
-    "../envs/dropseq_tools.yml"
+  conda: "../envs/dropseq_tools.yml"
   shell:
     "mkdir -p {output} && "  # create genomeDir directory
     "STAR --runThreadN {threads} "
