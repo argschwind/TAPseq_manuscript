@@ -9,6 +9,8 @@ def get_cbc_whitelist(wildcards):
   sample = wildcards.sample
   if sample in config["screen"]:
     whitelist = "meta_data/screen_10x_bc_whitelist_737k_201608.txt.gz"
+  elif sample == "WholeTx":
+    whitelist = "meta_data/wholeTx_10x_bc_whitelist_737k_201608.txt.gz"
   else:
     whitelist = "meta_data/10x_bc_whitelist_737k_201608.txt"
   return whitelist

@@ -9,6 +9,9 @@ samples:
   8iv22ng:    /g/steinmetz/incoming/solexa/2018-11-22-H3372BGX9/lane1/LIB38088_RBA37571/fastq
   8iScreen1:  /g/steinmetz/project/singcellTxn/CRISPRdrop/10X_RAW_DATA/k562_screen_Feb2019/8iScreen1
   11iScreen1: /g/steinmetz/project/singcellTxn/CRISPRdrop/10X_RAW_DATA/k562_screen_Feb2019/11iScreen1
+  WholeTx:    /scratch/gschwind/WholeTx
+  TAP1:       /g/steinmetz/incoming/solexa/2019-04-17-H5HTFBDXX/lane1/LIB43383_RBA42866/fastq
+  TAP2:       /g/steinmetz/incoming/solexa/2019-04-17-H5HTFBDXX/lane1/LIB43382_RBA42865/fastq
 
 # rough A PRIORI estimate of the number of sequenced cells per sample. this is only used for plots
 # in the alignment report and does not impact generated output data
@@ -20,6 +23,9 @@ expect_cell_numbers:
   8iv22ng:    8000
   8iScreen1:  100000
   11iScreen1: 100000
+  WholeTx:    32000
+  TAP1:       8000
+  TAP2:       8000
 
 # number of cells for which dge data should be extracted. these can be arrays to extract dge for
 # multiple sets of cells per sample
@@ -31,6 +37,9 @@ dge_ncells:
   8iv22ng:    7500
   8iScreen1:  112000
   11iScreen1: 120000
+  WholeTx:    38000
+  TAP1:       11000
+  TAP2:       11000
   
 # cell and umi barcode base positions in barcode reads for each sample. the first element of the
 # array is the cell barcode range, while the second is the UMI barcode range. for screen samples the
@@ -44,6 +53,9 @@ bc_structure:
   8iv22ng:    [1-16, 17-26]
   8iScreen1:  [1-24, 25-34]
   11iScreen1: [1-24, 25-34]
+  WholeTx:    [1-24, 25-34]
+  TAP1:       [1-16, 17-26]
+  TAP2:       [1-16, 17-26]
 
 # alignment reference for each sample
 align_ref:
@@ -54,6 +66,9 @@ align_ref:
   8iv22ng:    data/tapseq_ref_validation
   8iScreen1:  data/tapseq_ref_chr8_screen
   11iScreen1: data/tapseq_ref_chr11_screen
+  WholeTx:    data/genome_reference_v2
+  TAP1:       data/tapseq_ref_validation_v2
+  TAP2:       data/tapseq_ref_validation_v2
   
 # number of minimum molecules per CROP-seq vector to define a cell perturbed for a given vector
 perturbation_status:
@@ -65,10 +80,14 @@ perturbation_status:
     8iv22ng:    8
     8iScreen1:  8
     11iScreen1: 8
+    WholeTx:    8
+    TAP1:       8
+    TAP2:       8
 
 # sample ids for validation and screen TAP-seq runs
-validation: [11iv210ng, 11iv22ng, 8iv210ng, 8iv22ng, Sample10X]
-screen:     [8iScreen1, 11iScreen1]
+validation:   [11iv210ng, 11iv22ng, 8iv210ng, 8iv22ng, Sample10X]
+screen:       [8iScreen1, 11iScreen1]
+tap_vs_whole: [WholeTx, TAP1, TAP2]
 
 ## PARAMETERS FOR INDIVIDUAL RULES =================================================================
 
@@ -79,17 +98,20 @@ download_genome_annot:
   
 create_tapseq_ref:
   target_genes: 
-    tapseq_ref_validation:   meta_data/target_genes_validation.gtf
-    tapseq_ref_chr8_screen:  meta_data/target_genes_chr8_screen.gtf
-    tapseq_ref_chr11_screen: meta_data/target_genes_chr11_screen.gtf
+    tapseq_ref_validation:    meta_data/target_genes_validation.gtf
+    tapseq_ref_chr8_screen:   meta_data/target_genes_chr8_screen.gtf
+    tapseq_ref_chr11_screen:  meta_data/target_genes_chr11_screen.gtf
+    tapseq_ref_validation_v2: meta_data/target_genes_validation_v2.gtf
   BSgenome_id: BSgenome.Hsapiens.UCSC.hg38
   
 create_vector_ref:
   vector_fasta:
-    genome_reference: meta_data/cropseq_vectors_validation.fasta
-    tapseq_ref_validation:   meta_data/cropseq_vectors_validation.fasta
-    tapseq_ref_chr8_screen:  meta_data/cropseq_vectors_chr8_screen.fasta
-    tapseq_ref_chr11_screen: meta_data/cropseq_vectors_chr11_screen.fasta
+    genome_reference:    meta_data/cropseq_vectors_validation.fasta
+    genome_reference_v2: meta_data/cropseq_vectors_validation_v2.fasta
+    tapseq_ref_validation:    meta_data/cropseq_vectors_validation.fasta
+    tapseq_ref_chr8_screen:   meta_data/cropseq_vectors_chr8_screen.fasta
+    tapseq_ref_chr11_screen:  meta_data/cropseq_vectors_chr11_screen.fasta
+    tapseq_ref_validation_v2: meta_data/cropseq_vectors_validation_v2.fasta
   vector_prefix:
     "CROPseq_dCas9_DS_"
   
