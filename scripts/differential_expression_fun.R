@@ -146,8 +146,8 @@ de_DEsingle <- function(pert_object) {
 #' Any other columns in colData will be used as covariates during modelling, but only the
 #' perturbation will be tested for signficance.
 #'
-#' @param pert_object SingleCellExperiment object containing gene expression data and cell groupings in
-#'   colData. The perturbation to be tested is assumed to be the first column in colData!
+#' @param pert_object SingleCellExperiment object containing gene expression data and cell groupings
+#'   in colData. The perturbation to be tested is assumed to be the first column in colData!
 de_MAST <- function(pert_object) {
   
   # normalize data using censored mean normalization with log1p as scale function
@@ -155,7 +155,7 @@ de_MAST <- function(pert_object) {
   logcounts <- normalize_cens_mean(counts, percentile = 0.9, norm_counts = FALSE, scale_fun = log1p)
   assay(pert_object, "logcounts") <- logcounts
   
-  # add some row- and colData expected by MAST
+  # add some row- and colData expected by MAST (not used in DE tests)
   rowData(pert_object) <- cbind(rowData(pert_object), primerid = rownames(pert_object))
   colData(pert_object) <- cbind(colData(pert_object), wellKey = colnames(pert_object))
   
@@ -221,6 +221,7 @@ de_LFC <- function(pert_object, pseudocount = 1) {
   data.frame(gene = rownames(avg_genex), avg_genex, stringsAsFactors = FALSE, row.names = NULL)
   
 }
+
 
 # helper functions ---------------------------------------------------------------------------------
 
