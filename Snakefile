@@ -21,7 +21,9 @@ rule all:
                 "results/downsampled_dge.html",
                 "results/downsampled_target_reads.html",
                 "results/8iScreen1_qc.html",
-                "results/11iScreen1_qc.html"]
+                "results/11iScreen1_qc.html",
+                "results/compare_covariates.html",
+                "results/map_enhancers.html"]
 
 # functions to run workflow only partially ---------------------------------------------------------
 
