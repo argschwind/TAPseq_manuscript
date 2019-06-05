@@ -9,7 +9,8 @@ samples:
   8iv22ng:    /g/steinmetz/incoming/solexa/2018-11-22-H3372BGX9/lane1/LIB38088_RBA37571/fastq
   8iScreen1:  /g/steinmetz/project/singcellTxn/CRISPRdrop/10X_RAW_DATA/k562_screen_Feb2019/8iScreen1
   11iScreen1: /g/steinmetz/project/singcellTxn/CRISPRdrop/10X_RAW_DATA/k562_screen_Feb2019/11iScreen1
-  WholeTx:    /scratch/gschwind/WholeTx
+  WholeTx:    /g/steinmetz/project/singcellTxn/CRISPRdrop/10X_RAW_DATA/cropseq_vs_tapseq_may2019/WholeTx
+  TAP:        /g/steinmetz/project/singcellTxn/CRISPRdrop/10X_RAW_DATA/cropseq_vs_tapseq_may2019/TAP
   TAP1:       /g/steinmetz/incoming/solexa/2019-04-17-H5HTFBDXX/lane1/LIB43383_RBA42866/fastq
   TAP2:       /g/steinmetz/incoming/solexa/2019-04-17-H5HTFBDXX/lane1/LIB43382_RBA42865/fastq
 
@@ -24,6 +25,7 @@ expect_cell_numbers:
   8iScreen1:  100000
   11iScreen1: 100000
   WholeTx:    32000
+  TAP:        16000
   TAP1:       8000
   TAP2:       8000
 
@@ -38,6 +40,7 @@ dge_ncells:
   8iScreen1:  112000
   11iScreen1: 120000
   WholeTx:    38000
+  TAP:        22000
   TAP1:       11000
   TAP2:       11000
   
@@ -54,6 +57,7 @@ bc_structure:
   8iScreen1:  [1-24, 25-34]
   11iScreen1: [1-24, 25-34]
   WholeTx:    [1-24, 25-34]
+  TAP:        [1-24, 25-34]
   TAP1:       [1-16, 17-26]
   TAP2:       [1-16, 17-26]
 
@@ -67,6 +71,7 @@ align_ref:
   8iScreen1:  data/tapseq_ref_chr8_screen
   11iScreen1: data/tapseq_ref_chr11_screen
   WholeTx:    data/genome_reference_v2
+  TAP:        data/tapseq_ref_validation_v2
   TAP1:       data/tapseq_ref_validation_v2
   TAP2:       data/tapseq_ref_validation_v2
   
@@ -81,13 +86,14 @@ perturbation_status:
     8iScreen1:  8
     11iScreen1: 8
     WholeTx:    8
+    TAP:        8
     TAP1:       8
     TAP2:       8
 
 # sample ids for validation and screen TAP-seq runs
 validation:   [11iv210ng, 11iv22ng, 8iv210ng, 8iv22ng, Sample10X]
 screen:       [8iScreen1, 11iScreen1]
-tap_vs_whole: [WholeTx, TAP1, TAP2]
+tap_vs_whole: [WholeTx, TAP, TAP1, TAP2]
 
 ## PARAMETERS FOR INDIVIDUAL RULES =================================================================
 
