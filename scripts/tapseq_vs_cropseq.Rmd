@@ -35,28 +35,23 @@ dir.create("results/plots", showWarnings = FALSE)
 The number of genome reads in the raw data (fastq) was counted for all samples. Similarily the
 number of reads aligned to target genes in the final .bam files was counted. The percentage of all
 read mapping to target genes is then compared between conventional CROP-seq and TAP-seq.
-```{r plotReadsOnTarget, fig.cap=cap, fig.width=2.5, fig.height=3.5}
+```{r plotReadsOnTarget, fig.cap=cap, fig.width=5, fig.height=4}
 # load read counts
 read_counts <- read.csv(here(snakemake@input$reads_on_target), stringsAsFactors = FALSE)
 
-# add variable for approach
-read_counts <- read_counts %>%
-  mutate(approach = if_else(sample == "Sample10X", true = "cropseq", false = "tapseq"))
+# add variable for approach and rename Sample10X to include assessed chromosome
+read_counts_plot <- read_counts %>%
+  mutate(approach = if_else(sample == "Sample10X", true = "cropseq", false = "tapseq")) %>%
+  mutate(sample = if_else(sample == "Sample10X", true = paste0(sample, " (", panel, ")"),
+                          false = sample)) %>%
+  arrange(panel, desc(sample))
 
-# calculate average percentage per approach and compute standard error of the mean
-avg_perc <- read_counts %>%
-  group_by(approach) %>%
-  summarize(avg = mean(perc),
-            sem = sd(perc) / sqrt(length(perc)))
-
-# create bar plot (no sem, because very small and very small sample size)
-ggplot(avg_perc, aes(x = fct_relevel(approach, "tapseq", after = 0L), y = avg, fill = approach)) +
-  geom_bar(color = "black", stat = "identity") +
-#  geom_errorbar(aes(ymin = avg - sem, ymax = avg + sem), width = 0.25) +
-  labs(y = "Percentage of reads mapping to target genes",
-       x = NULL) +
-  scale_x_discrete(labels = c("TAP-seq", "CROP-seq")) +
+# plot percentage of total reads on target genes
+ggplot(read_counts_plot, aes(x = fct_inorder(sample), y = perc, fill = approach)) +
+  geom_bar(stat = "identity") +
+  labs(y = "Percentage of reads mapping to target genes", x = NULL) +
   scale_y_continuous(labels = scales::percent) +
+  coord_flip() +
   theme_bw() +
   theme(legend.position = "none") +
   scale_fill_manual(values =  c("tapseq" = "firebrick2", "cropseq" = "gray42"))
@@ -65,7 +60,7 @@ ggplot(avg_perc, aes(x = fct_relevel(approach, "tapseq", after = 0L), y = avg, f
 cap <- "Percentage of reads mapping to assessed target genes."
 
 # save plot to file
-ggsave(here("results/plots/reads_on_target.pdf"), device = "pdf", width = 2.5, height = 3.5)
+ggsave(here("results/plots/reads_on_target.pdf"), device = "pdf", width = 5, height = 4)
 ```
 
 ***
@@ -166,11 +161,12 @@ ggsave(here("results/plots/avg_txs_per_gene.pdf"), device = "pdf", width = 7, he
 lim <- max(abs(avg_txs_fc$lfc))
 
 # plot lfc per gene between methods
-ggplot(avg_txs_fc, aes(x = sample, y = lfc, color = sample)) +
+ggplot(avg_txs_fc, aes(x = sample, y = lfc, color = type)) +
   geom_hline(yintercept = 0, color = "darkgray", lty = "dashed", size = 1) +
   geom_jitter(width = 0.2, size = 1) +
   geom_boxplot(outlier.shape = NA, fill = NA, color = "gray42", notch = TRUE) +
   labs(x = "TAP-seq sample", y = "Log fold change TAP-seq / CROP-seq") +
+  scale_color_manual(values = c("e-gene" = "firebrick2", "non_e-gene" = "gray42")) +
   coord_flip() +
   theme_bw() +
   theme(legend.position = "none")
@@ -179,7 +175,7 @@ ggplot(avg_txs_fc, aes(x = sample, y = lfc, color = sample)) +
 cap <- "Average LFC TAP-seq vs. CROP-seq"
 
 # save plot to file
-ggsave(here("results/plots/lfc_tapseq_vs_cropseq.pdf"), device = "pdf", height = 4, width = 5)
+ggsave("results/plots/lfc_tapseq_vs_cropseq.pdf", device = "pdf", height = 4, width = 5)
 ```
 
 ***
