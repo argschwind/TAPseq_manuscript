@@ -16,6 +16,7 @@ dependencies:
   - r-tidyverse=1.2.1
   - r-corrplot=0.84
   - r-factoextra=1.0.5
+  - r-ggpubr=0.2
   - bioconductor-biocparallel=1.16.2
   - bioconductor-mast=1.8.1
   - bioconductor-rtracklayer=1.42.1

@@ -183,3 +183,12 @@ map_enhancers:
     perEnh:  25
     perGRNA: 15
   threads: 5
+  
+chromatin_analyses:
+  encode_chip:
+    H3K27ac:  "https://www.encodeproject.org/files/ENCFF779QTH/@@download/ENCFF779QTH.bigWig"
+    H3K4me1:  "https://www.encodeproject.org/files/ENCFF761XBZ/@@download/ENCFF761XBZ.bigWig"
+    H3K4me3:  "https://www.encodeproject.org/files/ENCFF712XRE/@@download/ENCFF712XRE.bigWig"
+    H3K27me3: "https://www.encodeproject.org/files/ENCFF928NWQ/@@download/ENCFF928NWQ.bigWig"
+    POLR2A:   "https://www.encodeproject.org/files/ENCFF321FZQ/@@download/ENCFF321FZQ.bigWig"
+  rao_hic: "ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE63nnn/GSE63525/suppl/GSE63525_K562_intrachromosomal_contact_matrices.tar.gz"

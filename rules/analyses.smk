@@ -235,12 +235,16 @@ rule map_enhancers:
   script:
     "../scripts/map_enhancers.Rmd"
 
+# perform in depth chromatin analyses of enhancer mapping results
 rule chromatin_analyses:
   input:
     processed_results = "data/diff_expr_screen_nGenesCovar.csv",
     dge = ["data/8iScreen1/dge.txt", "data/11iScreen1/dge.txt"]
   output:
     "results/chromatin_analyses_screen.html"
+  params:
+    encode_chip_urls = config["chromatin_analyses"]["encode_chip"],
+    rao_hic = config["chromatin_analyses"]["rao_hic"]
   conda: "../envs/r_map_enhancers.yml"
   script:
     "../scripts/chromatin_analyses_screen.Rmd"

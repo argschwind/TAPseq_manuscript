@@ -23,7 +23,8 @@ rule all:
                 "results/8iScreen1_qc.html",
                 "results/11iScreen1_qc.html",
                 "results/compare_covariates.html",
-                "results/map_enhancers.html"]
+                "results/map_enhancers.html",
+                "results/chromatin_analyses_screen.html"]
 
 # functions to run workflow only partially ---------------------------------------------------------
 
