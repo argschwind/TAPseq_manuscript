@@ -235,16 +235,24 @@ rule map_enhancers:
   script:
     "../scripts/map_enhancers.Rmd"
 
+# download chromatin data
+rule download_chromatin_data:
+  output:
+    "data/k562_chromatin_data/{assay}_encode_chipseq_fcOverCtrl.bigWig"
+  params:
+    url = lambda wildcards: config["chromatin_analyses"]["encode_chip"][wildcards.assay]
+  conda: "../envs/dropseq_tools.yml"
+  shell:
+    "wget -O {output} {params.url}"
+  
 # perform in depth chromatin analyses of enhancer mapping results
 rule chromatin_analyses:
   input:
     processed_results = "data/diff_expr_screen_nGenesCovar.csv",
-    dge = ["data/8iScreen1/dge.txt", "data/11iScreen1/dge.txt"]
+    encode_chip = expand("data/k562_chromatin_data/{assay}_encode_chipseq_fcOverCtrl.bigWig",
+      assay = config["chromatin_analyses"]["encode_chip"])
   output:
     "results/chromatin_analyses_screen.html"
-  params:
-    encode_chip_urls = config["chromatin_analyses"]["encode_chip"],
-    rao_hic = config["chromatin_analyses"]["rao_hic"]
   conda: "../envs/r_map_enhancers.yml"
   script:
     "../scripts/chromatin_analyses_screen.Rmd"
