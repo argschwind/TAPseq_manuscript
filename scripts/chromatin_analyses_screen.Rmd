@@ -23,12 +23,13 @@ img {
 # set global chunk options
 knitr::opts_chunk$set(echo = FALSE)
 
-# disable dplyr progress bars
+# disable all dplyr progress bars
 options(dplyr.show_progress = FALSE)
 
 # attach required packages
 library(ggpubr)
 library(here)
+library(kableExtra)
 library(rtracklayer)
 library(tidyverse)
 ```
@@ -46,7 +47,7 @@ names(chip_files) <- sub("_.*", "", basename(chip_files))
 ```
 
 # Chromatin assays
-Chromatin assays from ENCODE are downloaded and the fold change over control signal is calculated
+Chromatin assays from ENCODE were downloaded and the fold change over control signal is calculated
 for every assessed enhancer. Significant enhancers are then compared to non-significant enhancers
 with a similar distance to TSS distribution to identify enrichment of chromatin marks at
 functionally verified enhancers.
@@ -171,7 +172,7 @@ nonSig_ctrls <- draw_control_pairs(sig_pairs, non_sig = nonSig_pairs, n = 3)
 all_pairs <- bind_rows(sig_pairs, nonSig_ctrls)
 ```
 
-```{r distance to TSS, fig.height=4, fig.width=9}
+```{r plotDistTSS, fig.cap=cap, fig.height=4, fig.width=9}
 # plot distance to TSS for significant pairs and sampled non-significant control pairs
 ggplot(all_pairs, aes(x = dist_to_tss, fill = significant)) +
   facet_wrap(~sample) +
@@ -179,12 +180,16 @@ ggplot(all_pairs, aes(x = dist_to_tss, fill = significant)) +
   labs(x = "Distance to TSS", y = "pairs",
        title = "Distance to TSS of significant vs non-significant control pairs") +
   theme_bw()
+
+# figure caption
+cap <- "Distance to TSS distribution of significant enhancers and sampled non-significant controls"
 ```
 
 
 ## Enrichment of chromatin marks at enhancers
-
-```{r plotChromMarks, fig.width=6, fig.height=5}
+The fold change over control signal is compared between enhancers significantly associated with a
+target gene and sampled non-significant control enhancers.
+```{r plotChromMarks, fig.cap=cap, fig.width=6, fig.height=7}
 # extract unique enhancers from gene-enhancer pairs and convert to long format
 enh_plot <- all_pairs %>%
   select(-c(sample, gene, pvalue, prop_grna_hits, dist_to_tss, dTSS_bin)) %>%
@@ -193,7 +198,7 @@ enh_plot <- all_pairs %>%
 
 # plot difference in enhancer relevant chromatin marks between significant and non-significant hits
 enh_plot %>%
-  filter(assay %in% c("H3K27ac", "H3K4me1", "H3K4me3", "POLR2A")) %>%
+#  filter(assay %in% c("H3K27ac", "H3K4me1", "H3K4me3", "POLR2A")) %>%
   ggplot(., aes(x = significant, y = fc_over_ctrl + 1, fill = significant)) +
   facet_wrap(~assay, ncol = 2) +
   geom_boxplot(notch = TRUE) +
@@ -206,35 +211,18 @@ enh_plot %>%
   theme(axis.title.x = element_blank(), legend.position = "none", text = element_text(size = 15),
         panel.grid = element_blank())
 
-# save plot for manuscript
-ggsave(here("results/plots", "chromatin_sig_vs_nonsig.pdf"), device = "pdf", width = 6,
-       height = 5)
+# figure caption
+cap <- "Chromatin marks of significant enhancers vs non-significant control enhancers"
 ```
 
 <br>
-
-```{r plotChromMarksCheck, fig.width=3.3, fig.height=3}
-# plot difference for H3K27me3 for sanity check (all enhancer should be depleted for H3K27me3)
-enh_plot %>%
-  filter(assay == "H3K27me3") %>%
-  ggplot(., aes(x = significant, y = fc_over_ctrl + 1, fill = significant)) +
-  facet_wrap(~assay, ncol = 2) +
-  geom_boxplot(notch = TRUE) +
-  stat_compare_means(comparisons =  list(c("sig", "non_sig")), method = "wilcox.test") +
-  labs(y = "Chromatin FC over control") +
-  scale_x_discrete(labels = c("Non significant", "Significant")) +
-  scale_y_log10(limits = c(NA, 180)) +
-  scale_fill_manual(values = c(non_sig = "darkgray", sig = "steelblue")) +
-  theme_bw() + 
-  theme(axis.title.x = element_blank(), legend.position = "none", text = element_text(size = 14),
-        panel.grid = element_blank())
-```
 
 ## Chromatin marks vs confidence levels
 Enhancer - gene pairs are classified as high-confidence, low-confidence and non-significant and
 chromatin activity at the involved enhancer is compared between the classes.
 
-```{r chromMarksVsConf, fig.width=7, fig.height=5}
+### Plot chromatin activity versus confidence level {-}
+```{r chromMarksVsConf, fig.cap=cap, fig.width=7, fig.height=5}
 # add label for confidence level based on prop gRNA hits
 all_pairs_conf <- all_pairs %>%
   filter(!is.na(prop_grna_hits)) %>%
@@ -255,20 +243,23 @@ all_pairs_conf %>%
   geom_boxplot(notch = TRUE) +
   stat_compare_means() +
   labs(y = "Chromatin FC over control") +
-  scale_fill_manual(values = c("High confidence" = "goldenrod2", "Low confidence" = "darkslategray3", 
-                               "Non significant" = "gray")) +
   scale_x_discrete(labels = c("High confidence", "Low confidence", "Non significant")) +
+  scale_fill_manual(values = c("High confidence" = "goldenrod2",
+                               "Low confidence" = "darkslategray3", "Non significant" = "gray")) +
   scale_y_log10(limits = c(NA, 180)) +
   theme_bw() +
   theme(axis.title.x = element_blank(), legend.position = "none", text = element_text(size = 11),
         panel.grid = element_blank())
+
+# figure caption
+cap <- "Chromatin mark signal versus enhancer confidence level"
 
 # save plot for manuscript
 ggsave(here("results/plots", "chromatin_sig_vs_conf.pdf"), device = "pdf", width = 7,
        height = 5)
 ```
 
-```{r chromMarksVsConfCheck, fig.width=3.8, fig.height=3}
+```{r chromMarksVsConfCheck, fig.cap=cap, fig.width=3.8, fig.height=3}
 # plot H3K27me3 vs confidence levels
 all_pairs_conf %>%
   filter(assay == "H3K27me3") %>%
@@ -277,14 +268,26 @@ all_pairs_conf %>%
   geom_boxplot(notch = TRUE) +
   stat_compare_means() +
   labs(y = "Chromatin FC over control") +
-  scale_fill_manual(values = c("High confidence" = "goldenrod2", "Low confidence" = "darkslategray3", 
-                               "Non significant" = "gray")) +
   scale_x_discrete(labels = c("High confidence", "Low confidence", "Non significant")) +
+  scale_fill_manual(values = c("High confidence" = "goldenrod2",
+                               "Low confidence" = "darkslategray3", "Non significant" = "gray")) +
   scale_y_log10(limits = c(NA, 180)) +
   theme_bw() +
   theme(axis.title.x = element_blank(), legend.position = "none", text = element_text(size = 11),
         panel.grid = element_blank())
+
+# figure caption
+cap <- "H3k27me3 signal versus enhancer confidence level"
+
+# save plot for manuscript
+ggsave(here("results/plots", "h3k27me3_vs_conf.pdf"), device = "pdf", width = 3.8,
+       height = 3)
 ```
+
+<br>
+
+### Pairwise tests {-}
+Pairwise tests are performed for all comparison using the non-parametric Wilcoxon signed-rank test.
 
 ```{r pairwiseTests}
 # perform individual pairwise tests
@@ -294,16 +297,22 @@ pw_tests <- compare_means(fc_over_ctrl ~ conf, group.by = "assay", data = all_pa
 # reformat for printing
 pw_tests <- pw_tests %>%
   select(assay, group1, group2, p.format, p.signif, p.adj) %>%
-  mutate(p.adj.signif = case_when(
-    p.adj <= 0.0001 ~ "****",
-    p.adj <= 0.001 ~ "***",
-    p.adj <= 0.01 ~ "**",
-    p.adj <= 0.05 ~ "*",
-    p.adj > 0.05 ~ "ns"
-  )) %>%
   rename(p.value = p.format)
 
+# create html table
+pw_table <- pw_tests %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("striped", "condensed"), full_width = FALSE,
+                position = "left")
+
 # print table
-knitr::kable(pw_tests)
+pw_table
 ```
 
+```{r savePwTests, message=FALSE}
+# make sure that phantomjs is installed, which is required to export the html table to a pdf file
+webshot::install_phantomjs()
+
+# save pairwise tests to file for manuscript
+save_kable(pw_table, file = "results/plots/chromatin_pairwise_tests.pdf")
+```
