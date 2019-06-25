@@ -67,17 +67,10 @@ ggsave(here("results/plots/reads_on_target.pdf"), device = "pdf", width = 5, hei
 
 # Number of transcripts per target gene
 The average number of detected transcripts per target gene are plotted for TAP-seq and CROP-seq
-experiments. CROP-seq experiments were sequences at much higher depth than TAP-seq experiments,
+experiments. CROP-seq experiments were sequenced at much higher depth than TAP-seq experiments,
 therefore the downsampled DGE data is used for these plots. This ensures that all experiments have
-comparable sequencing depth.
+a comparable sequencing depth of 3500 reads per cell on average.
 ```{r prepareDGE}
-# dge files
-dge_files <- here(snakemake@input$dge)
-names(dge_files) <- basename(dirname(dge_files))  # sample id as name
-
-# load all dge data
-dge <- lapply(dge_files, FUN = read.table, header = TRUE, stringsAsFactors = FALSE)
-
 # load tap-seq target genes
 target_genes <- read.csv(here(snakemake@input$target_genes), stringsAsFactors = FALSE)
 
@@ -86,48 +79,61 @@ known_enh <- target_genes %>%
   filter(screen == "validation") %>%
   pull(gene)
 
-# only retain genes in target gene panels, convert to long format and make one data.frame
-dge_filt <- dge %>%
-  lapply(FUN = filter, GENE %in% target_genes$gene) %>%
-  lapply(gather, key = "cell", value = "txs", -GENE) %>%
-  bind_rows(.id = "sample") %>%
-  rename("gene" = GENE)
+# get downsampled dge files and set names
+ds_dge_files <- here(snakemake@input$dge)
+names(ds_dge_files) <- ds_dge_files %>%
+  sub("_avg_reads_per_cell.txt", "", .) %>%
+  sub(".*data/", "", .) %>%
+  sub("/downsampled/dge_", "_", .)
 
-# add panel information to each gene
-dge_filt <- dge_filt %>%
+# load downsampled dge data and only retain chr8 and chr11 target genes, convert to long format and
+# make one data.frame
+ds_dge <- ds_dge_files %>%
+  lapply(FUN = read.table, header = TRUE, stringsAsFactors = FALSE) %>%
+  lapply(FUN = filter, GENE %in% target_genes$gene) %>%
+  lapply(FUN = gather, key = "cell",  value = "txs", -GENE) %>%
+  bind_rows(.id = "sample") %>%
+  rename(gene = GENE)
+
+# split sample into sample and sequencing depth, and add gene panel and experiment information
+ds_dge <- ds_dge %>%
+  separate(sample, into = c("sample", "avg_rpc"), sep = "_") %>%
+  mutate(avg_rpc = as.numeric(avg_rpc)) %>%
   left_join(target_genes[, c("gene", "panel")], by = "gene") %>%
-  mutate(panel = sub("_.+", "", panel))
+  mutate(panel = sub("_.+", "", panel)) %>%
+  mutate(exp = case_when(sample %in% c("11iv210ng", "11iv22ng") ~ "chr11",
+                         sample %in% c("8iv210ng", "8iv22ng") ~ "chr8",
+                         TRUE ~ "cropseq"))
 
 # only retain intended target gene expression for tap-seq samples
-dge_filt <- dge_filt %>%
+ds_dge <- ds_dge %>%
   mutate(sample_panel = paste0("chr", sub("iv2.+" ,"", sample))) %>%
   filter(sample_panel == panel | gene %in% known_enh | sample == "Sample10X") %>%
   select(-sample_panel)
 ```
 
 ```{r avgTxs, fig.cap=cap, fig.height=7, fig.width=6}
+# only retain data on 3500 reads per cell downsampling
+ds_dge_filt <- filter(ds_dge, avg_rpc == 3500)
+
 # calculate average number transcripts per target gene and experiment
-avg_txs <- dge_filt %>%
-  group_by(sample, gene) %>%
+avg_txs <- ds_dge_filt %>%
+  group_by(sample, exp, gene) %>%
   summarize(avg_txs = mean(txs)) %>%
-  mutate(type = if_else(gene %in% known_enh, true = "e-gene", false = "non_e-gene"))
+  mutate(type = if_else(gene %in% known_enh, true = "e-gene", false = "non_e-gene")) %>%
+  ungroup()
 
-# format so that each gene has a column for the expression in a tap-seq and the crop-seq experiment
+# extract average transcripts per gene for crop-seq
+avg_txs_cropseq <- avg_txs %>%
+  ungroup() %>%
+  filter(exp == "cropseq") %>%
+  select(gene, cropseq = avg_txs)
+
+# add to tap-seq data and calculate log fold change
 avg_txs_fc <- avg_txs %>%
-  spread(key = "sample", value = "avg_txs") %>%
-  gather(key = "sample", value = "avg_txs", -c(gene, type, Sample10X)) %>%
-  drop_na() %>%  # remove any rows with avg_txs = NA, introduced by transformation trickery
-  rename("cropseq" = Sample10X) %>%
+  filter(exp != "cropseq") %>%
+  left_join(avg_txs_cropseq, by = "gene") %>%
   mutate(fc = avg_txs / cropseq, lfc = log2(fc))
-
-# add variable assigning each tap-seq sample to panels chr11 or chr8
-avg_txs_fc <- avg_txs_fc %>%
-  mutate(panel = if_else(grepl(sample, pattern = "11iv2.+ng"), true = "chr11", false = "chr8"))
-
-# average fold change across all genes
-avg_fc <- avg_txs_fc %>%
-  group_by(sample) %>%
-  summarize(avg_fc = mean(fc))
 
 # axis limits
 axis_limits <- range(select(avg_txs_fc, cropseq, avg_txs))
@@ -156,6 +162,8 @@ cap <- "Average transcripts per gene, TAP-seq vs. CROP-seq"
 ggsave(here("results/plots/avg_txs_per_gene.pdf"), device = "pdf", width = 7, height = 7)
 ```
 
+This comparison is quantified by calculating the log fold change in detected transcripts between the
+two methods for every gene:
 ```{r lfcMethods, fig.cap = cap, fig.height=4, fig.width=5}
 # axis limits
 lim <- max(abs(avg_txs_fc$lfc))
@@ -181,52 +189,52 @@ ggsave("results/plots/lfc_tapseq_vs_cropseq.pdf", device = "pdf", height = 4, wi
 ***
 
 # Number of detected genes per cell
-```{r detectionSensitivity, fig.cap=cap, fig.height=5, fig.width=6}
-# add variable for experiment each sample belonged to
-dge_filt <- dge_filt %>%
-  mutate(exp = if_else(sample %in% c("11iv210ng", "11iv22ng"), true = "chr11", false = "cropseq")) %>%
-  mutate(exp = if_else(sample %in% c("8iv210ng", "8iv22ng"), true = "chr8", false = exp))
-
-# calculate number of cells in which a gene is detected
-cells_genes <- dge_filt %>%
-  group_by(exp, gene) %>%
+To assess the sensitivity to detect target genes the percentage of cells in which a gene is detected
+is computed. To factor in expression levels of the target genes, the results are binned into
+expression quartiles based on CROP-seq expression levels. This analysis is performed for both
+TAP-seq and CROP-seq across all downsampled sequencing depths.
+```{r detectionSensitivity, fig.cap=cap, fig.height=5, fig.width=7}
+# calculate number of cells in which a gene is detected in each experiment
+cells_genes <- ds_dge %>%
+  group_by(exp, avg_rpc, gene) %>%
   summarize(avg_txs = mean(txs),
             perc_cells = mean(txs > 0))
 
-# compute expression quantile for each gene based on CROP-seq
+# compute expression quantiles for all target genes based on average expression in CROP-seq
 expr_quantiles <- cells_genes %>%
   ungroup() %>%
-  filter(exp == "cropseq") %>%
+  filter(exp == "cropseq", avg_rpc == 20000) %>%
   mutate(quantile = ntile(avg_txs, 4)) %>%
   select(gene, quantile)
 
-# add expression quantile to each gene (all experiments)
+# add expression quantile to each gene
 cells_genes <- left_join(cells_genes, expr_quantiles, by = "gene")
 
 # reformat for plot
-cells_genes <- cells_genes %>%
+cells_genes_plot <- cells_genes %>%
+  ungroup() %>%
   select(-avg_txs) %>%
   spread(key = "exp", value = "perc_cells") %>%
-  gather(key = "exp", value = "tapseq", -c(gene, quantile, cropseq)) %>%
+  gather(key = "exp", value = "tapseq", -c(avg_rpc, gene, quantile, cropseq)) %>%
+  gather(key = "approach", value = "perc_cells", -c(avg_rpc, gene, quantile, exp)) %>%
   drop_na() %>%
-  gather(key = "approach", value = "perc_cells", -c(gene, quantile, exp))
+  mutate(avg_rpc = factor(avg_rpc, levels = sort(unique(avg_rpc))),
+         approach = fct_relevel(approach, "tapseq"))
 
-# create boxplot
-ggplot(cells_genes, aes(x = as.factor(quantile), y = perc_cells, fill = approach)) +
-  facet_wrap(~exp, ncol = 1, nrow = 2)+
-  geom_boxplot() +
+# create boxplot comparing detection sensitivity between tap and crop-seq across sequencing depths
+ggplot(cells_genes_plot, aes(x = as.factor(quantile), y = perc_cells)) +
+  facet_wrap(~exp, ncol = 1, nrow = 2) +
+  geom_boxplot(aes(linetype = approach, fill = avg_rpc), outlier.shape = NA) +
   labs(y = "Cells in which genes are detected", x = "CROP-seq expression quantiles",
-       fill = "Method") +
+       fill = "Avg reads per cell", linetype = "Method") +
   scale_y_continuous(labels = scales::percent) +
-  scale_fill_manual(labels = c("tapseq" = "TAP-seq", "cropseq" = "CROP-seq"),
-                    values =  c("tapseq" = "firebrick2", "cropseq" = "gray42")) +
   theme_bw()
 
 # figure caption
 cap <- "Detection sensitivity TAP-seq vs. CROP-seq (all genes should be expressed in K562)"
 
 # save plot to file
-ggsave(here("results/plots/detection_sensitivity.pdf"), device = "pdf", height = 5, width = 6)
+ggsave(here("results/plots/detection_sensitivity.pdf"), device = "pdf", height = 5, width = 7)
 ```
 
 ***

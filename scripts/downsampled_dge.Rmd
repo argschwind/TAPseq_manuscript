@@ -25,8 +25,10 @@ img {
 knitr::opts_chunk$set(echo = FALSE)
 
 # attach required packages
-library(tidyverse)
+library(grid)
+library(gridExtra)
 library(here)
+library(tidyverse)
 ```
 
 ```{r loadData}
@@ -181,7 +183,6 @@ lfc <- ds_avg_genex %>%
 ## LFC
 The log fold changes between perturbed and control cells is plotted for different target genes
 across sampling sizes and methods (TAP-seq vs CROP-seq).
-
 ```{r plotLFC}
 # calculate mean, median and 95% intervals for each experiment, perturbation, sampling size and gene
 lfc_stats <- lfc %>%
@@ -218,13 +219,73 @@ ggplot(lfc_stats_plot,
   geom_point(shape = "-", size = 9, position = position_dodge(width = 0.6)) +
   labs(x = "Average CROP-seq gene expression", y = "Median LFC") +
   theme_bw()
+```
+
+Observed LFC for selected sampling sizes in alternative plotting style:
+```{r plotLFCAlt, fig.height=5, fig.width=8}
+# function to plot lfc across sampling sizes of tap-seq vs crop-seq
+plot_lfc <- function(lfc_stats, perturbation, target_genes){
   
+  # get lfc data for given perturbation and reformat for plotting
+  lfc_pert <- lfc_stats %>%
+    filter(target == perturbation) %>%
+    gather(key = "stat", value = "value", -c(exp, method, target, size, gene)) %>%
+    unite(col = "stat", method, stat) %>%
+    spread(key = "stat", value = "value")
+  
+  # remove any genes that are only present in one experiment (lead to NA in spread())
+  lfc_pert <- drop_na(lfc_pert)
+  
+  # add variable to identify target genes of given perturbation
+  lfc_pert <- lfc_pert %>%  
+    mutate(type = if_else(gene %in% target_genes, true = "target", false = "non-target"))
+  
+  # axis limits
+  lim <- range(c(unlist(lfc_pert[, c(6, 10)]),  # all average lfcs
+                 unlist(filter(lfc_pert, type == "target")[, c(6,8,10,12)])))  # 95% ci target genes 
+  
+  # create plots
+  ggplot(lfc_pert, aes(x = tapseq_avg_lfc, y = cropseq_avg_lfc)) +
+    facet_wrap(~size, ncol = 4) +
+    geom_vline(xintercept = 0, lty = "dashed", lwd = 0.6, col = "darkgray") +
+    geom_hline(yintercept = 0, lty = "dashed", lwd = 0.6, col = "darkgray") +
+    geom_point(color = "darkgray", size = 0.5) +
+    geom_errorbar(data = filter(lfc_pert, type == "target"),
+                  aes(ymin = cropseq_lower_95, ymax = cropseq_upper_95),
+                  width = diff(lim) / 20) +
+    geom_errorbarh(data = filter(lfc_pert, type == "target"),
+                   aes(xmin = tapseq_lower_95, xmax = tapseq_upper_95),
+                   height = diff(lim) / 20) +
+    geom_label(data = filter(lfc_pert, type == "target"), aes(label = gene), size = 2.5) +
+    labs(title = perturbation, x = "TAP-seq", y = "CROP-seq") +
+    coord_fixed(xlim = lim, ylim = lim) +
+    theme_bw()
+  
+}
+
+# choose sampling sizes for plot
+lfc_stats_plot <- filter(lfc_stats, size %in% c(25, 50, 80)) 
+
+# create plots for chr11 and chr8 panels
+plots_chr11 <- lapply(names(known_targets), FUN = function(x){
+  plot_lfc(filter(lfc_stats_plot, exp == "chr11"), perturbation = x,
+           target_genes = known_targets[[x]])
+})
+
+plots_chr8 <- lapply(names(known_targets), FUN = function(x){
+  plot_lfc(filter(lfc_stats_plot, exp == "chr8"), perturbation = x,
+           target_genes = known_targets[[x]])
+})
+
+# print plots
+grid.arrange(grobs = plots_chr11, ncol = 2, top = textGrob("Chromosome 11", gp = gpar(fontsize=18)))
+grid.arrange(grobs = plots_chr8, ncol = 2, top = textGrob("Chromosome 8", gp = gpar(fontsize=18)))
 ```
 
 ## Percentage negative
 The percentage of samples yielding a negative LFC is plotted for selected target genes and across
-sampling sizes and methods.
-
+sampling sizes and methods. The performance seems to be strongly correlated with expression levels
+of the genes and TAP-seq provides an advantage for genes with low expression.
 ```{r plotSig}
 # for each sampling size, calculate the percentage of draws in which each gene had a negative lfc
 neg_perc <- lfc %>%
@@ -268,60 +329,6 @@ ggplot(neg_perc_ctrl, aes(x = size, y = perc_neg, color = method)) +
   scale_color_manual(labels = c("tapseq" = "TAP-seq", "cropseq" = "CROP-seq"),
                      values =  c("tapseq" = "firebrick2", "cropseq" = "gray42")) +
   theme_bw()
-```
-
-```{r plotLFC2, fig.height=5, fig.width=8, eval = FALSE}
-# only use data on sizes 40, 100 & 200
-lfc_stats_plot <- filter(lfc_stats, size %in% c(40, 100, 200)) 
-
-# function to plot lfc across sampling sizes of tap-seq vs crop-seq
-plot_lfc <- function(lfc_stats, perturbation, target_genes){
-  
-  # get lfc data for given perturbation and reformat for plotting
-  lfc_pert <- lfc_stats %>%
-    filter(target == perturbation) %>%
-    gather(key = "stat", value = "value", -c(exp, method, target, size, gene)) %>%
-    unite(col = "stat", method, stat) %>%
-    spread(key = "stat", value = "value")
-  
-  # remove any genes that are only present in one experiment (lead to NA in spread())
-  lfc_pert <- drop_na(lfc_pert)
-  
-  # add variable to identify target genes of given perturbation
-  lfc_pert <- lfc_pert %>%  
-    mutate(type = if_else(gene %in% target_genes, true = "target", false = "non-target"))
-  
-  # axis limits
-  lim <- range(c(unlist(lfc_pert[, c(6, 10)]),  # all average lfcs
-                 unlist(filter(lfc_pert, type == "target")[, c(6,8,10,12)])))  # 95% ci target genes 
-  
-  # create plots
-  ggplot(lfc_pert, aes(x = tapseq_avg_lfc, y = cropseq_avg_lfc)) +
-    facet_wrap(~size, ncol = 4) +
-    geom_vline(xintercept = 0, lty = "dashed", lwd = 0.6, col = "darkgray") +
-    geom_hline(yintercept = 0, lty = "dashed", lwd = 0.6, col = "darkgray") +
-    geom_point(color = "darkgray", size = 0.5) +
-    geom_errorbar(data = filter(lfc_pert, type == "target"),
-                  aes(ymin = cropseq_lower_95, ymax = cropseq_upper_95),
-                  width = diff(lim) / 20) +
-    geom_errorbarh(data = filter(lfc_pert, type == "target"),
-                   aes(xmin = tapseq_lower_95, xmax = tapseq_upper_95),
-                   height = diff(lim) / 20) +
-    geom_label(data = filter(lfc_pert, type == "target"), aes(label = gene), size = 2.5) +
-    labs(title = perturbation, x = "TAP-seq", y = "CROP-seq") +
-    coord_fixed(xlim = lim, ylim = lim) +
-    theme_bw()
-  
-}
-
-# create plots for chr11 and chr8 panels
-plots_chr11 <- lapply(names(known_targets), FUN = function(x){
-  plot_lfc(filter(lfc_stats, panel == "chr11"), perturbation = x, target_genes = known_targets[[x]])
-})
-
-plots_chr8 <- lapply(names(known_targets), FUN = function(x){
-  plot_lfc(filter(lfc_stats, panel == "chr8"), perturbation = x, target_genes = known_targets[[x]])
-})
 ```
 
 ***

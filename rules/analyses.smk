@@ -22,7 +22,7 @@ def get_cbc_whitelist(wildcards):
   else:
     whitelist = "meta_data/10x_cell_barcode_whitelists/10x_bc_whitelist_737k_201608.txt"
   return whitelist
-  
+
 # get correct perturbation status input file for DE strategies
 def perturb_status_file(wildcards):
   sample = wildcards.sample
@@ -34,7 +34,7 @@ def perturb_status_file(wildcards):
   else:
     raise ValueError("strategy mus be 'perGRNA' or 'perEnh'!")
   return(pert_file)
-  
+
 # validation experiments ---------------------------------------------------------------------------
 
 # rule to downsample genic reads to the same sequencing depth per sample and then extract dge
@@ -43,20 +43,19 @@ rule downsample:
     umi_obs = "data/{sample}/umi_observations.txt",
     whitelist = get_cbc_whitelist
   output:
-    dge = "data/{sample}/downsampled_dge.txt",
-    dge_stats = "data/{sample}/downsampled_dge_summary.txt",
-    tpt_hist = "data/{sample}/downsampled_dge_tpt_histogram.txt"
+    dge = "data/{sample}/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+    dge_stats = "data/{sample}/downsampled/dge_{rpc}_avg_reads_per_cell_summary.txt",
+    tpt_hist = "data/{sample}/downsampled/dge_{rpc}_avg_reads_per_cell_tpt_histogram.txt"
   params:
-    reads = lambda wildcards: config["dge_ncells"][wildcards.sample]
-              * config["downsample"]["reads_per_cell"],
+    reads = lambda wildcards: config["dge_ncells"][wildcards.sample] * int(wildcards.rpc),
     tpt_threshold = config["extract_dge"]["tpt_threshold"],
-    seed = 20190204
-  log: "data/{sample}/logs/downsample.log"
+    seed = 20190607
+  log: "data/{sample}/logs/downsample_{rpc}_avg_reads_per_cell.log"
   conda: "../envs/dropseq_tools.yml"
   shell:
     "python scripts/extract_dge.py -i {input.umi_obs} -o {output.dge} -w {input.whitelist} "
     "--sample {params.reads} --seed {params.seed} --tpt_threshold {params.tpt_threshold} 2> {log}"
-
+  
 # calculate reads on target genes enrichment
 rule reads_on_target:
   input:
@@ -70,45 +69,50 @@ rule reads_on_target:
   conda: "../envs/r_analyses.yml"
   script:
     "../scripts/reads_on_target.R"
-
+  
 # TAP-seq vs CROP-seq using downsampled dge to same sequencing depth per sample
 rule tapseq_vs_cropseq:
   input:
     reads_on_target = "data/reads_on_target.csv",
     target_genes = "meta_data/target_genes_validation.csv",
-    dge = expand("data/{sample}/downsampled_dge.txt", sample = config["validation"])
+    dge = [expand("data/{sample}/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+             sample = "Sample10X", rpc = config["downsample"]["reads_per_cell"]["Sample10X"]),
+           expand("data/{sample}/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+             sample = ["11iv210ng", "11iv22ng", "8iv210ng", "8iv22ng"],
+             rpc = config["downsample"]["reads_per_cell"]["tap-seq"])]
   output:
     "results/tapseq_vs_cropseq.html"
   conda: "../envs/r_analyses.yml"
   script:
     "../scripts/tapseq_vs_cropseq.Rmd"
-
+  
 # analysis of downsampled dge to same sequencing depth per sample for power comparison between
 # TAP-seq and CROP-seq
 rule downsampled_dge:
   input:
-    dge = expand("data/{sample}/downsampled_dge.txt", sample = config["validation"]),
+    dge = expand("data/{sample}/downsampled/dge_3500_avg_reads_per_cell.txt",
+      sample = config["validation"]),
     pert_status = expand("data/{sample}/perturb_status.txt", sample = config["validation"]),
-    target_genes = "meta_data/target_genes_validation.csv"
+    target_genes = "meta_data/target_genes_validation.csv",
   output:
     "results/downsampled_dge.html"
   conda: "../envs/r_analyses.yml"
   script:
     "../scripts/downsampled_dge.Rmd"
-    
+  
 # downsample TAP-seq and CROP-seq dge to a fixed number of reads on target genes per cell
 rule downsampled_target_reads:
   input:
     umi_obs = expand("data/{sample}/umi_observations.txt", sample = config["validation"]),
     pert_status = expand("data/{sample}/perturb_status.txt", sample = config["validation"]),
     target_genes = "meta_data/target_genes_validation.csv",
-    whitelist = "meta_data/10x_bc_whitelist_737k_201608.txt"
+    whitelist = "meta_data/10x_cell_barcode_whitelists/10x_bc_whitelist_737k_201608.txt"
   output:
     "results/downsampled_target_reads.html"
   conda: "../envs/r_analyses.yml"
   script:
     "../scripts/downsampled_target_reads.Rmd"
-
+  
 # screen experiments -------------------------------------------------------------------------------
 
 # chromosome 8 screen QC
@@ -128,7 +132,7 @@ rule qc_8iScreen1:
   conda: "../envs/r_analyses.yml"
   script:
     "../scripts/8iScreen1_qc.Rmd"
-    
+  
 # chromosome 11 screen QC
 rule qc_11iScreen1:
   input:
@@ -146,7 +150,7 @@ rule qc_11iScreen1:
   conda: "../envs/r_analyses.yml"
   script:
     "../scripts/11iScreen1_qc.Rmd"
-    
+  
 # collapse perturbation status by gRNA vector targets
 rule collapse_perturbations:
   input:
@@ -159,7 +163,7 @@ rule collapse_perturbations:
   shell:
     "python scripts/collapse_perturbations.py -i {input.pert_status} -t {input.grna_targets} "
     "-o {output} 2> {log}"
-    
+  
 # map enhancer-gene pairs using MAST for differential gene expression testing. strategy can be
 # either "perEnh" or "perGRNA", specifying whether DE tests should be performed using perturbations
 # collapsed per enhancer or per gRNA. covars specifies the cell-level covariates that should be used
@@ -192,8 +196,7 @@ rule compare_covariates:
     dge = expand("data/{sample}/dge.txt", sample = config["screen"]),
     perturb_status = expand("data/{sample}/perturb_status_collapsed.txt",
       sample = config["screen"]),
-    annot = ["meta_data/target_genes_chr8_screen.gtf",
-      "meta_data/target_genes_chr11_screen.gtf"]
+    annot = ["meta_data/target_genes_chr8_screen.gtf", "meta_data/target_genes_chr11_screen.gtf"]
   output:
     "results/compare_covariates.html"
   params:
@@ -201,7 +204,7 @@ rule compare_covariates:
   conda: "../envs/r_map_enhancers.yml"
   script:
     "../scripts/compare_covariates.Rmd"
-    
+  
 # process de results and calculate useful stats such as confidence levels and distance to TSS.
 # generates input files for detailed enhancer analyses
 rule process_de_results:
@@ -217,7 +220,7 @@ rule process_de_results:
   conda: "../envs/r_map_enhancers.yml"
   script:
     "../scripts/process_de_results.R"
-    
+  
 # perform basic analyses of differential expression results and enhancer - target gene pairs.
 rule map_enhancers:
   input:
@@ -234,7 +237,7 @@ rule map_enhancers:
   conda: "../envs/r_map_enhancers.yml"
   script:
     "../scripts/map_enhancers.Rmd"
-
+  
 # download chromatin data
 rule download_chromatin_data:
   output:

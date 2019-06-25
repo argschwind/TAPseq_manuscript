@@ -168,7 +168,9 @@ extract_dge:
     
 # step 4: analyses ---------------------------------------------------------------------------------
 downsample:
-  reads_per_cell: 3500
+  reads_per_cell:
+    Sample10X: [1000, 1500, 3500, 5000, 10000, 15000, 20000]
+    tap-seq:   [1000, 1500, 3500]
  
 collapse_perturbations:
   targets:
