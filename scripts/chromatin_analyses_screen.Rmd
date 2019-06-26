@@ -189,20 +189,25 @@ cap <- "Distance to TSS distribution of significant enhancers and sampled non-si
 ## Enrichment of chromatin marks at enhancers
 The fold change over control signal is compared between enhancers significantly associated with a
 target gene and sampled non-significant control enhancers.
-```{r plotChromMarks, fig.cap=cap, fig.width=6, fig.height=7}
+```{r plotChromMarks, warning=FALSE, fig.cap=cap, fig.width=6, fig.height=7}
 # extract unique enhancers from gene-enhancer pairs and convert to long format
 enh_plot <- all_pairs %>%
   select(-c(sample, gene, pvalue, prop_grna_hits, dist_to_tss, dTSS_bin)) %>%
   distinct() %>%
   gather(key = "assay", value = "fc_over_ctrl", -c(perturbation, enh_chr, significant))
 
+# pairwise comparisons using wilcoxon test and format adjusted p-value for plotting
+pw_tests <- compare_means(fc_over_ctrl ~ significant, group.by = "assay", data = enh_plot,
+                          method = "wilcox.test", p.adjust.method = "holm") %>%
+  mutate(p.adj.plot = if_else(p.adj < 0.001, true = "< 0.001",
+                              false = paste("=", round(p.adj, digits = 2))))
+
 # plot difference in enhancer relevant chromatin marks between significant and non-significant hits
-enh_plot %>%
-#  filter(assay %in% c("H3K27ac", "H3K4me1", "H3K4me3", "POLR2A")) %>%
-  ggplot(., aes(x = significant, y = fc_over_ctrl + 1, fill = significant)) +
+ggplot(enh_plot, aes(x = significant, y = fc_over_ctrl + 1, fill = significant)) +
   facet_wrap(~assay, ncol = 2) +
   geom_boxplot(notch = TRUE) +
-  stat_compare_means(comparisons =  list(c("sig", "non_sig")), method = "wilcox.test") +
+  stat_pvalue_manual(pw_tests, label = "p adj. {p.adj.plot}", y.position = log10(145),
+                     inherit.aes = FALSE) +
   labs(y = "Chromatin FC over control") +
   scale_x_discrete(labels = c("Non significant", "Significant")) +
   scale_y_log10(limits = c(NA, 180)) +
@@ -222,7 +227,7 @@ Enhancer - gene pairs are classified as high-confidence, low-confidence and non-
 chromatin activity at the involved enhancer is compared between the classes.
 
 ### Plot chromatin activity versus confidence level {-}
-```{r chromMarksVsConf, fig.cap=cap, fig.width=7, fig.height=5}
+```{r chromMarksVsConf, warning=FALSE, fig.cap=cap, fig.width=7, fig.height=5}
 # add label for confidence level based on prop gRNA hits
 all_pairs_conf <- all_pairs %>%
   filter(!is.na(prop_grna_hits)) %>%
@@ -235,13 +240,22 @@ all_pairs_conf <- all_pairs %>%
 all_pairs_conf <- all_pairs_conf %>%
   gather(key = "assay", value = "fc_over_ctrl", -c(1:8, dTSS_bin, conf))
 
+# perform kruskal-wallis test (non-parametric one-way anova) per assay and reformat adjusted p-value
+kw_tests <- compare_means(formula = fc_over_ctrl ~ conf, method = "kruskal.test",
+                          data = all_pairs_conf, group.by = "assay") %>%
+  mutate(p.adj.plot = if_else(p.adj < 0.001, true = "< 0.001",
+                              false = paste("=", round(p.adj, digits = 2)))) %>%
+  mutate(group1 = "Low confidence")
+
 # plot chromatin signal for high-, low-confidence and non significant enhancer - gene pairs
 all_pairs_conf %>%
   filter(assay != "H3K27me3") %>%
   ggplot(., aes(x = conf, y = fc_over_ctrl + 1, fill = conf)) +
   facet_wrap(~assay) +
   geom_boxplot(notch = TRUE) +
-  stat_compare_means() +
+  stat_pvalue_manual(data = filter(kw_tests, assay != "H3K27me3"), x = "group1", y.position = 175,
+                     label = "{method}, p adj {p.adj.plot}", remove.bracket = TRUE,
+                     inherit.aes = FALSE) +
   labs(y = "Chromatin FC over control") +
   scale_x_discrete(labels = c("High confidence", "Low confidence", "Non significant")) +
   scale_fill_manual(values = c("High confidence" = "goldenrod2",
@@ -259,14 +273,16 @@ ggsave(here("results/plots", "chromatin_sig_vs_conf.pdf"), device = "pdf", width
        height = 5)
 ```
 
-```{r chromMarksVsConfCheck, fig.cap=cap, fig.width=3.8, fig.height=3}
+```{r chromMarksVsConfCheck, warning=FALSE, fig.cap=cap, fig.width=3.8, fig.height=3}
 # plot H3K27me3 vs confidence levels
 all_pairs_conf %>%
   filter(assay == "H3K27me3") %>%
   ggplot(., aes(x = conf, y = fc_over_ctrl + 1, fill = conf)) +
   facet_wrap(~assay) +
   geom_boxplot(notch = TRUE) +
-  stat_compare_means() +
+  stat_pvalue_manual(data = filter(kw_tests, assay == "H3K27me3"), x = "group1", y.position = 175,
+                     label = "{method}, p adj {p.adj.plot}", remove.bracket = TRUE,
+                     inherit.aes = FALSE) +
   labs(y = "Chromatin FC over control") +
   scale_x_discrete(labels = c("High confidence", "Low confidence", "Non significant")) +
   scale_fill_manual(values = c("High confidence" = "goldenrod2",
