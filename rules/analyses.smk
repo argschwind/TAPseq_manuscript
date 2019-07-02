@@ -247,7 +247,25 @@ rule download_chromatin_data:
   conda: "../envs/dropseq_tools.yml"
   shell:
     "wget -O {output} {params.url}"
-  
+    
+# download Hi-C data
+rule download_hic_data:
+  output:
+    expand("data/k562_chromatin_data/HiC/5kb_resolution_intrachromosomal/{chr}/MAPQG0/{chr}_{file}",
+      chr = ["chr8", "chr11"], file = ["5kb.RAWobserved", "5kb.KRnorm"])
+  params:
+    url = config["chromatin_analyses"]["rao_hic"]
+  conda: "../envs/dropseq_tools.yml"
+  shell:
+    "wget -c {params.url} -O - | tar -xz "
+    "K562/5kb_resolution_intrachromosomal/chr8/MAPQG0/ "
+    "K562/5kb_resolution_intrachromosomal/chr11/MAPQG0/ ; "
+    "mv K562/5kb_resolution_intrachromosomal/chr8/MAPQG0/* "
+    "data/k562_chromatin_data/HiC/5kb_resolution_intrachromosomal/chr8/MAPQG0 ; "
+    "mv K562/5kb_resolution_intrachromosomal/chr11/MAPQG0/* "
+    "data/k562_chromatin_data/HiC/5kb_resolution_intrachromosomal/chr11/MAPQG0 ; "
+    "rm -r K562"
+    
 # perform in depth chromatin analyses of enhancer mapping results
 rule chromatin_analyses:
   input:
