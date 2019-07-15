@@ -74,15 +74,26 @@ results <- here(snakemake@input$processed_results) %>%
   read.csv(stringsAsFactors = FALSE) %>% 
   mutate(sample = paste0("Chr", sub("iScreen1", "", sample)))
 
-# load dge data
-dge_files <- here(snakemake@input$dge)
-names(dge_files) <- basename(dirname(dge_files))
-dge <- lapply(dge_files, FUN = read.table, header = TRUE, row.names = "GENE", 
-              stringsAsFactors = FALSE)
+# load perturbation status
+perturb_status_files <- here(snakemake@input$perturb_status)
+names(perturb_status_files) <- basename(dirname(perturb_status_files))
+perturb_status <- lapply(perturb_status_files, FUN = read.table, header = TRUE,
+                         row.names = "TARGET", stringsAsFactors = FALSE)
+
+# load vector targets
+vector_target_files <- here(snakemake@input$vector_targets)
+names(vector_target_files) <- sub(".+_(chr\\d+)_.+", "\\1", basename(vector_target_files))
+vector_targets <- vector_target_files %>%
+  lapply(FUN = read.csv, stringsAsFactors = FALSE) %>%
+  bind_rows(.id = "sample")
 ```
 
-# Number of cell per perturbation
-The numbers of cells per perturbation are plotted for per sample and strategy.
+# Differential gene expression analysis
+Various aspects of the performed differential gene expression analysis are assessed.
+
+## Number of cells per perturbation
+The numbers of cells per tested perturbation are plotted for per sample and strategy.
+
 ```{r ncells}
 # minimum number of cells per perturbation used for DE tests
 min_cells <- snakemake@config$map_enhancers$min_cells %>%
@@ -104,8 +115,6 @@ ggplot(ncells, aes(cells)) +
   theme_bw()
 ```
 
-# Differentially expressed genes
-
 ## P-value distribution
 ```{r pvalueDistr}
 # correct for multiple testing across samples using FDR
@@ -124,6 +133,7 @@ ggplot(de_output, aes(pvalue)) +
 
 ## Singificant hits
 The numbers and percentages of significant hits per sample and strategy are plotted.
+
 ```{r hitsVsFdr, fig.height=7, fig.width=7}
 # count the number and proportion of hits across different FDR values
 hits <- de_output %>%
@@ -162,6 +172,7 @@ grid.arrange(p1, p2, ncol = 1)
 Significant hits (FDR < 0.05) from the per perturbation approach are used to infer enhancer - target
 gene pairs. The per gRNA results are used to assign a confidence level to each enhancer - gene pair
 based on how many individual gRNAs had a significant association at FDR < 0.05.
+
 ```{r confidence}
 # add variable for significant associations
 results <- results %>%
@@ -181,12 +192,97 @@ ggplot(hits_conf_levels, aes(x = as.factor(grna_hits), y = hits, fill = sample))
   theme_bw()
 ```
 
-# Genomic features
-Data on cis enhancer perturbations (no promoter controls, at least 1kb from TSS) are extracted and
-genomic properties such as number of enhacners per gene and distance to TSS are assessed.
+# Cis-enhancers
+Data on cis enhancer perturbations (no promoter controls, at least 1kb from TSS) are extracted and 
+further investigated. Genomic properties such as number of enhancers per gene and distance to TSS
+are assessed to obtain biological insights.
+
+## Enhancer perturbations
+The number of enhancers perturbations per cell and cells per perturbation are plotted as an overview
+of the screen experiment.
+
+```{r enhPerts}
+# known enhancer perturbations
+known_enh <- c("GATA1", "HS2", "MYC", "ZFPM2")
+
+# get all transfected enhancer perturbations
+enh_pert_targets <- vector_targets %>%
+  select(sample, TARGET) %>%
+  distinct() %>%
+  filter(grepl(TARGET, pattern = "chr\\d+:.*") | TARGET %in% known_enh) %>%
+  mutate(sample = paste0(sub("chr", "", sample), "iScreen1"))
+
+# only retain perturbation status on enhancer perturabtions
+enh_perts <- perturb_status %>%
+  lapply(FUN = function(x) {
+    enh_rows <- rownames(x) %in% enh_pert_targets$TARGET
+    x[enh_rows, ]
+  })
+```
+
+```{r cellsPerPert}
+# count number of cells per perturbation
+cells_per_pert <- enh_perts %>%
+  lapply(FUN = rowSums) %>%
+  lapply(FUN = function(x) data.frame(pert = names(x), cells = x, stringsAsFactors = FALSE) ) %>%
+  bind_rows(.id = "sample")
+
+# add transfected, but not detected perturbations (in case there are any...)
+cells_per_pert <- cells_per_pert %>%
+  full_join(enh_pert_targets, by = c("sample" = "sample", "pert" = "TARGET")) %>%
+  mutate(cells = replace_na(cells, replace = 0)) %>%
+  mutate(sample = paste0("Chr", sub("iScreen1", "", sample)))
+  
+# plot number of cell per perturbation
+p1 <- ggplot(cells_per_pert, aes(x = sample, y = cells, fill = sample)) +
+  geom_violin() +
+  labs(y = "Cells", title = "Cells per perturbation") +
+  scale_fill_manual(values = c("Chr11" = "indianred3", "Chr8" = "steelblue")) +
+  scale_y_continuous(breaks = seq(0, 600, 100)) +
+  theme_bw() +
+  theme(text = element_text(size = 20), legend.position = "none", axis.title.x = element_blank(),
+        panel.grid = element_blank())
+
+# save plot for manuscript
+ggsave(p1, filename = here("results/plots", "cells_per_pert.pdf"), device = "pdf", width = 5, 
+       height = 5)
+```
+
+```{r pertsPerCell, fig.width=10, fig.height=5}
+# count number of perturbations per cell
+perts_per_cell <- perturb_status %>%
+  lapply(FUN = colSums) %>%
+  lapply(FUN = function(x) data.frame(cell = names(x), perts = x, stringsAsFactors = FALSE) ) %>%
+  bind_rows(.id = "sample") %>%
+  mutate(sample = paste0("Chr", sub("iScreen1", "", sample)))
+
+# compute histogram
+perts_per_cell_hist <- perts_per_cell %>%
+  group_by(sample, perts) %>%
+  summarize(cells = n()) %>%
+  mutate(perts = factor(perts, levels = seq(0, max(.$perts))))
+
+# plot perturbations per cell histogram
+p2 <- ggplot(perts_per_cell_hist, aes(x = perts, y = cells / 1000, fill = sample)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(x = "Enhancer perturbations per cell", y = "Cells (x 1000)",
+       fill = "Region:") +
+  scale_fill_manual(values = c("Chr11" = "indianred3", "Chr8" = "steelblue")) +
+  theme_bw() +
+  theme(text = element_text(size = 20), legend.position = "top", panel.grid = element_blank())
+
+# save plot for manuscript
+ggsave(p2, filename = here("results/plots", "perts_per_cell.pdf"), device = "pdf", width = 5, 
+       height = 5)
+
+# print plots
+grid.arrange(p1, p2, ncol = 2)
+```
 
 ## Number of cis-enhancers per gene
-```{r enhPerGene1}
+The number of cis-enhancers per gene are counted and plotted.
+
+```{r enhPerGene, fig.width=5, fig.height=4.5}
 # extract cis enhancer - gene pairs
 cis_enh_perts <- filter(results, enh_type == "cis", abs(dist_to_tss) >= 1000)
 
@@ -215,67 +311,22 @@ enh_counts <- enh_per_gene %>%
 # plot number of genes per enhancer count
 ggplot(enh_counts, aes(x = factor(enh, levels = seq_len(max(enh))), y = genes, fill = sample)) +
   geom_bar(stat = "identity", position = "dodge") +
-  labs(x = "Enhancers", y = "Genes", title = "Number of enhancers per gene",
-       fill = "Sample") +
+  labs(x = "Enhancers", y = "Genes", title = "Enhancers per gene",
+       fill = "Region") +
   scale_fill_manual(values = c("Chr11" = "indianred3", "Chr8" = "steelblue")) +
   scale_x_discrete(drop = FALSE) +
   theme_bw() +
-  theme(text = element_text(size = 15))
+  theme(text = element_text(size = 20), legend.position = c(0.84, 0.82),
+        panel.grid = element_blank())
 
 # save plot for manuscript
-ggsave(here("results/plots", "enhancers_per_gene.pdf"), device = "pdf", width = 7, height = 5)
-```
-
-```{r enhPerGene2}
-# compute number of genes per enhancer count
-enh_counts <- enh_per_gene %>%
-  filter(enh > 0) %>%
-  group_by(enh) %>%
-  summarize(genes = n())
-
-# plot number of genes per enhancer count without grouping per chromosome
-ggplot(enh_counts, aes(x = factor(enh, levels = seq_len(max(enh))), y = genes)) +
-  geom_bar(stat = "identity", position = "dodge", fill = "gray42") +
-  labs(x = "Enhancers", y = "Genes", title = "Number of enhancers per gene",
-       fill = "Sample") +
-  scale_x_discrete(drop = FALSE) +
-  theme_bw()
-```
-
-## Number of enhancers vs average gene expression
-```{r enhsVsExpr}
-# function to extract gene expression from dge data
-extract_genex <- function(x, vector_pattern) {
-  gene_rows <- grep(rownames(x), pattern = vector_pattern, invert = TRUE)
-  x[gene_rows, ]
-}
-
-# extract gene expression for both experiments
-gene_expr <- lapply(dge, FUN = extract_genex, vector_pattern = snakemake@params$vector_pattern)
-
-# calculate average expression per gene
-avg_genex <- gene_expr %>%
-  lapply(FUN = rowMeans) %>%
-  lapply(FUN = function(x) {
-    data.frame(gene = names(x), avg_genex = x, stringsAsFactors = FALSE) 
-  }) %>%
-  bind_rows(.id = "sample") %>%
-  mutate(sample = paste0("Chr", sub("iScreen1", "", sample)))
-
-# add average gene expression to enhancers per gene
-enh_per_gene <- enh_per_gene %>%
-  left_join(avg_genex, by = c("sample", "gene")) %>%
-  filter(enh > 0)
-
-# plot number of enhancers vs average gene expression
-ggplot(enh_per_gene, aes(x = avg_genex, y = enh, color = sample, label = gene)) +
-  facet_wrap(~sample, scales = "free") +
-  geom_text() +
-  scale_color_manual(values = c("Chr11" = "indianred3", "Chr8" = "steelblue")) +
-  theme_bw()
+ggsave(here("results/plots", "enhancers_per_gene.pdf"), device = "pdf", width = 5, height = 4.5)
 ```
 
 ## P-value vs distance to TSS
+The negative log10 p-value is plotted as function of distance to TSS to show that strong
+associations (high -log10 p-value) are located close to their target genes TSS.
+
 ```{r dTssVsPval}
 # calculate -log10 p-value
 cis_enh_perts <- mutate(cis_enh_perts, neg_log10_pvalue = -log10(pvalue))
@@ -308,7 +359,7 @@ ggplot(cis_enh_perts_plot,
   theme_bw()
 ```
 
-```{r assocVsDist, fig.width=7, fig.height=5}
+```{r assocVsDist, fig.width=8, fig.height=5}
 # get hit closest to TSS
 closest_hit <- cis_enh_perts_plot %>%
   filter(significant == "sig") %>%
@@ -319,25 +370,49 @@ cis_enh_perts_plot <- cis_enh_perts_plot %>%
   filter(abs(dist_to_tss) >= abs(closest_hit$dist_to_tss))
 
 # plot decay of association strength over distance within 1Mb of TSS
-cis_enh_perts_plot %>%
-  ggplot(., aes(x = abs(dist_to_tss) / 1000, y = neg_log10_pvalue, color = prop_grna_hits)) +
-    geom_smooth(data = filter(cis_enh_perts_plot, significant == "sig"),
-                method = "loess", se = FALSE, color = "black") +
-    labs(x = "Distance to TSS (kb)", y = expression(-log[10] ~ p - value),
+p1 <- ggplot(cis_enh_perts_plot, aes(x = abs(dist_to_tss) / 1e6, y = neg_log10_pvalue,
+                                     color = prop_grna_hits)) +
+    labs(x = "Distance to TSS (Mb)", y = expression(-log[10] ~ p - value),
          color = "Confidence\n(prop. gRNA hits)",
-         title = "Association strength vs distance to TSS") +
+         title = "Association strength vs. distance to TSS") +
     geom_point(data = filter(cis_enh_perts_plot, significant == "non_sig")) +
     geom_point(data = filter(cis_enh_perts_plot, significant == "sig")) +
-    scale_x_log10() +
     scale_color_gradient(low = "blue", high = "orangered", na.value = "gray69") +
     theme_bw() +
-    theme(text = element_text(size = 15))
+    theme(text = element_text(size = 20), panel.grid = element_blank())
+
+# same plot, but with logarithmic distance
+p2 <- ggplot(cis_enh_perts_plot, aes(x = abs(dist_to_tss) / 1e6, y = neg_log10_pvalue,
+                                     color = prop_grna_hits)) +
+    geom_smooth(data = filter(cis_enh_perts_plot, significant == "sig"),
+                method = "loess", se = FALSE, color = "black") +
+    labs(x = "Distance to TSS (Mb)", y = expression(-log[10] ~ p - value)) +
+    geom_point(data = filter(cis_enh_perts_plot, significant == "non_sig")) +
+    geom_point(data = filter(cis_enh_perts_plot, significant == "sig")) +
+    scale_x_log10(breaks = c(0.01, 0.1, 1, 10), labels = c("0.01", "0.1", "1", "10")) +
+    scale_color_gradient(low = "blue", high = "orangered", na.value = "gray69") +
+    theme_bw() +
+    theme(text = element_text(size = 15), axis.title = element_blank(), legend.position = "none",
+          panel.grid = element_blank(), plot.background = element_rect(fill = NA))
+
+# add logarithmic plot as inset of linear plot
+p1 + 
+  annotation_custom(
+    grob = ggplotGrob(p2),
+    xmin = 20,
+    xmax = 55,
+    ymin = 40,
+    ymax = 120
+  )
 
 # save plot for manuscript
-ggsave(here("results/plots", "enh_pval_vs_dist.pdf"), device = "pdf", width = 7, height = 5)
+ggsave(here("results/plots", "enh_pval_vs_dist.pdf"), device = "pdf", width = 8, height = 5)
 ```
 
 ## Distance to TSS across confidence levels
+From the previous plots, it becomes evident, that high-confidence enhancers are located within 1Mb
+of the target TSS. This is investigated further by plotting the number of individual gRNA hits vs.
+distance to TSS.
 ```{r dTssVsConf}
 # only select significant enhancer - gene pairs that have a associated confidence score
 enh_gene_pairs <- filter(cis_enh_perts, significant == "sig", !is.na(prop_grna_hits))
@@ -351,50 +426,43 @@ ggplot(enh_gene_pairs, aes(x = as.factor(grna_hits), y = abs(dist_to_tss) / 1000
        title = "Distance to TSS vs confidence level", color = "Sample") +
   scale_color_manual(values = c("Chr11" = "indianred3", "Chr8" = "steelblue")) +
   scale_y_log10() +
-  theme_bw()
+  theme_bw() +
+  theme(text = element_text(size = 20))
 
 # save plot for manuscript
 ggsave(here("results/plots", "confidence_vs_dist.pdf"), device = "pdf", width = 7, height = 5)
 ```
 
-```{r dTssVsConf2}
-# add label for significant whether the prop gRNA hits is >= 0.5
+<br>
+
+Enhancer-gene pairs with a proportion of individual gRNA hits >= 0.5 are considered high-confidence
+hits. All these hits occur withing 1Mb of the target gene TSS:
+
+```{r confLevelVsdTSS}
+# add label for confidence level based on prop gRNA hits
 cis_enh_perts_plot <- cis_enh_perts %>%
   filter(!is.na(prop_grna_hits)) %>%
   mutate(conf = if_else(significant == "sig" & prop_grna_hits >= 0.5,
-                        true = "Sig. conf >= 0.5", false = "Non Sig."),
+                        true = "High confidence", false = "Non significant"),
          conf = if_else(significant == "sig" & prop_grna_hits < 0.5,
-                        true = "Sig. conf <= 0.5", false = conf))
+                        true = "Low confidence", false = conf))
 
 # plot distance to TSS of significant enhacner gene - pairs vs non-significant pairs
 ggplot(cis_enh_perts_plot,
-       aes(x = fct_relevel(conf, "Sig. conf >= 0.5", "Sig. conf <= 0.5"),
+       aes(x = fct_relevel(conf, "High confidence", "Low confidence"),
            y = abs(dist_to_tss) / 1000, fill = conf)) +
   geom_hline(yintercept = 1000, lty = "dashed") +
   geom_violin() +
   labs(y = "Distance to TSS (kb)") +
-  scale_fill_manual(values = c("Sig. conf >= 0.5" = "indianred3", "Sig. conf <= 0.5" = "steelblue", 
-                               "Non Sig." = "gray")) +
+  scale_fill_manual(values = c("High confidence" = "goldenrod2", "Low confidence" = "darkslategray3", 
+                               "Non significant" = "gray")) +
   scale_y_log10() +
   theme_bw() +
-  theme(legend.position = "none", axis.title.x = element_blank(), text = element_text(size = 15))
+  theme(legend.position = "none", axis.title.x = element_blank(), text = element_text(size = 20),
+        panel.grid = element_blank())
 
 # save plot for manuscript
 ggsave(here("results/plots", "dist_sig_vs_nonsig.pdf"), device = "pdf", width = 7, height = 5)
-```
-
-## Distance to TSS vs target gene expression
-```{r dTssVsExpr}
-# add average gene expression to enhancer - gene pairs
-enh_gene_pairs <- left_join(enh_gene_pairs, avg_genex, by = c("sample", "gene"))
-
-# plot distance to TSS vs average expression
-ggplot(enh_gene_pairs, aes(x = abs(dist_to_tss) / 1000, y = avg_genex, color = sample)) +
-  geom_point() +
-  labs(x = "Distance to TSS (kb)", y = "Average gene expression", color = "Sample",
-       title = "Gene expression vs distance to TSS") +
-  scale_color_manual(values = c("Chr11" = "indianred3", "Chr8" = "steelblue")) +
-  theme_bw()
 ```
 
 ## Enhancers and gene landscape
@@ -403,6 +471,7 @@ associations.
 
 ### Jumped genes
 For each enhancer - target gene association the number of jumped genes is calculated and plotted.
+
 ```{r}
 # import gencode hg38 annotations
 annot_url <- "ftp://ftp.ensembl.org/pub/release-89/gtf/homo_sapiens/Homo_sapiens.GRCh38.89.chr.gtf.gz"
@@ -489,6 +558,8 @@ ggsave(here("results/plots", "pvalue_vs_jumped_genes.pdf"), device = "pdf", widt
 ```
 
 ### Nearest gene
+Every significant pair is assessed whether the target is the closest gene to the enhancer.
+
 ```{r, fig.width = 3, fig.height=5}
 # get coordinates of enhancers
 enh_coords <- enh_gene_pairs %>%

@@ -114,7 +114,7 @@ rule downsampled_target_reads:
     "../scripts/downsampled_target_reads.Rmd"
   
 # screen experiments -------------------------------------------------------------------------------
-
+    
 # chromosome 8 screen QC
 rule qc_8iScreen1:
   input:
@@ -150,7 +150,7 @@ rule qc_11iScreen1:
   conda: "../envs/r_analyses.yml"
   script:
     "../scripts/11iScreen1_qc.Rmd"
-  
+    
 # collapse perturbation status by gRNA vector targets
 rule collapse_perturbations:
   input:
@@ -229,7 +229,9 @@ rule map_enhancers:
     ncells = expand("data/{sample}/diff_expr/ncells_{strategy}_nGenesCovar.csv",
       sample = config["screen"], strategy = ["perEnh", "perGRNA"]),
     processed_results = "data/diff_expr_screen_nGenesCovar.csv",
-    dge = ["data/8iScreen1/dge.txt", "data/11iScreen1/dge.txt"]
+    perturb_status = expand("data/{sample}/perturb_status_collapsed.txt",
+      sample = config["screen"]),
+    vector_targets = expand("meta_data/vector_targets_{chr}_screen.csv", chr = ["chr8", "chr11"])
   output:
     "results/map_enhancers.html"
   params:
@@ -277,3 +279,4 @@ rule chromatin_analyses:
   conda: "../envs/r_map_enhancers.yml"
   script:
     "../scripts/chromatin_analyses_screen.Rmd"
+
