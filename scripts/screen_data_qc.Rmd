@@ -1,0 +1,572 @@
+---
+title: "Screen QC"
+author: "Andreas Gschwind"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+params:
+  rmd: "screen_data_qc.Rmd"
+output:
+  bookdown::html_document2:
+    toc: yes
+---
+
+# Goal
+General QC of screen perturbations and DGE data. Number of transcripts per cell, detected
+perturbations and gene expression levels etc. are investigated to assess data quality.
+```{css echo=FALSE}
+/* Define a margin before every image element */
+img {
+  margin-top: 3em;
+}
+```
+
+```{r setup, include=FALSE}
+# set global chunk options
+knitr::opts_chunk$set(echo = FALSE)
+
+# attach required packages
+library(factoextra)
+library(grid)
+library(gridExtra)
+library(ggrepel)
+library(GGally)
+library(here)
+library(tidyverse)
+```
+
+```{r loadData}
+# load target genes
+target_genes <- read.csv(here(snakemake@input$target_genes), stringsAsFactors = FALSE)
+
+# load dge summary
+dge_stats_files <- here(snakemake@input$dge_stats)
+names(dge_stats_files) <- basename(dirname(dge_stats_files))
+dge_stats <- lapply(dge_stats_files, FUN = read.table, header = TRUE, stringsAsFactors = FALSE)
+
+# load dge data
+dge_files <- here(snakemake@input$dge)
+names(dge_files) <- basename(dirname(dge_files))
+dge <- lapply(dge_files, FUN = read.table, header = TRUE, stringsAsFactors = FALSE,
+              row.names = "GENE")
+
+# load perturbation status
+perturb_status_files <- here(snakemake@input$perturb_status)
+names(perturb_status_files) <- basename(dirname(perturb_status_files))
+perturb_status <- lapply(perturb_status_files, FUN = read.table, header = TRUE,
+                         row.names = "VECTOR", stringsAsFactors = FALSE)
+
+# dge input files from validation TASC-seq experiments
+valid_dge_files <- grep(snakemake@input$valid_dge, pattern = "iv2", value = TRUE)
+valid_dge_files <- here(valid_dge_files)
+names(valid_dge_files) <- basename(dirname(valid_dge_files))
+
+# load validation dge data
+valid_dge <- lapply(valid_dge_files, FUN = read.table, header = TRUE, stringsAsFactors = FALSE)
+
+# load experimental meta data and add sample information
+exp_data <- here(snakemake@input$exp_data) %>%
+  read.csv(stringsAsFactors = FALSE) %>%
+  mutate(sample = paste0(sub("chr", "", panel), "Screen1"))
+
+# transfected vector files
+vector_files <- here(snakemake@input$vctr_seqs)
+names(vector_files) <- sub("cropseq_vectors_(chr.+)_screen.fasta", "\\1", basename(vector_files))
+
+# load transfected vectors and extract sample ids for both chromosomal regions
+vectors <- vector_files %>%
+  lapply(FUN = readLines) %>%
+  lapply(FUN = grep, pattern = "^>.+$", perl = TRUE, value = TRUE) %>%
+  lapply(FUN = function(x) data.frame(vector = x, stringsAsFactors = FALSE) ) %>%
+  bind_rows(.id = "sample") %>%
+  mutate(vector = sub(vector, pattern = ">", replacement = ""),
+         sample = paste0(sub("chr", "", sample), "iScreen1"))
+
+# extract vector expression from dge data
+vector_pattern <- snakemake@params$vector_pattern
+vector_rows <- lapply(dge, FUN = function(x) grep(rownames(x), pattern = vector_pattern) )
+vctr_expr <- mapply(FUN = function(x, y) x[y, ], x = dge, y = vector_rows)
+
+# extract gene expression data
+gene_expr <- mapply(FUN = function(x, y) x[-y, ], x = dge, y = vector_rows)
+
+# remove dge to free up memory
+rm(dge)
+```
+
+# Batch effects
+Multiple 10x lanes were used in parallel to process the high number of cells. Here the DGE data is
+assessed for any batch effects resulting from using different lanes. Cell barcodes start with i7
+barcodes, which correspond to individual 10x lanes. Metadata on used 10x lanes is used to assign
+each cell to its 10x lane.
+
+# Number of cells and genes
+The number of cells and detected genes per cell are plotted for each 10x lane.
+
+```{r cellsGenes, fig.height=7, fig.width=7}
+# combine dge_stats into one data.frame and split cell barcode into i7 and cell
+dge_stats <- dge_stats %>%
+  bind_rows(.id = "sample") %>%
+  separate(col = cell_barcode, into = c("i7_index", "cell"), sep = 8)
+
+# add variable for 10x lane
+dge_stats <- left_join(dge_stats, select(exp_data, sample, name, i7_index),
+                       by = c("sample", "i7_index"))
+
+# plot number of cells per lane
+p1 <- ggplot(dge_stats, aes(x = name, fill = name)) +
+  facet_wrap(~sample, scales = "free_x") +
+  geom_bar() +
+  theme_bw() +
+  labs(x = "10x lane", y = "Cells", title = "Number of cells per 10x lane") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "none")
+
+# plot number of detected genes per cell
+p2 <- ggplot(dge_stats, aes(x = name, y = genes, color = name)) +
+  facet_wrap(~sample, scales = "free_x") +
+  geom_jitter(width = 0.1, alpha = 0.2) +
+  geom_boxplot(color = "black", fill = NA, outlier.shape = NA, notch = TRUE) +
+  labs(x = "10x lane", y = "Detected genes", title = "Detected genes per cell") +
+  scale_y_log10() +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "none")
+
+# print plots
+grid.arrange(p1, p2, nrow = 2, ncol = 1)
+```
+
+## Number of genic reads and transcripts
+The number of detected transcripts per cell vs genic reads is plotted and compared between different
+10x lanes.
+
+```{r TxsVsReads, fig.height=10, fig.width=7}
+# plot number of transcripts vs genic reads
+p1 <- ggplot(dge_stats, aes(x = transcripts, y = genic_reads, color = name)) +
+  facet_wrap(~sample) +
+  geom_point() +
+  labs(x = "Transcripts", y = "Genic reads", title = "Transcripts vs. genic reads",
+       color = "10x lane") +
+  scale_x_log10() +
+  scale_y_log10() +
+  theme_bw() +
+  theme(legend.position = "none")
+
+# plot number of genic reads per cell
+p2 <- ggplot(dge_stats, aes(x = name, y = genic_reads, color = name)) +
+  facet_wrap(~sample, scales = "free_x", ncol = 2) +
+  geom_jitter(width = 0.1, alpha = 0.2) +
+  geom_boxplot(color = "black", fill = NA, outlier.shape = NA, notch = TRUE) +
+  labs(x = "10x lane", y = "Genic reads", title = "Genic reads per cell") +
+  scale_y_log10() +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "none")
+
+# plot number of transcripts per cell
+p3 <- ggplot(dge_stats, aes(x = name, y = transcripts, color = name)) +
+  facet_wrap(~sample, scales = "free_x", ncol = 2) +
+  geom_jitter(width = 0.1, alpha = 0.2) +
+  geom_boxplot(color = "black", fill = NA, outlier.shape = NA, notch = TRUE) +
+  labs(x = "10x lane", y = "Transcripts", title = "Transcripts per cell") +
+  scale_y_log10() +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "none")
+
+# print plots
+layout <- rbind(c(1, 1), c(2, 2), c(3, 3))
+grid.arrange(p1, p2, p3, layout_matrix = layout)
+```
+
+## Average gene expression
+The average expression per gene is calculated across all cells of a given lane. The average
+expression is then plotted to compare different 10x lanes.
+
+```{r avgGenex, fig.width=6, fig.height=4}
+# transpose gene expression, convert to long format and combine into one data.frame
+gene_expr_l <- gene_expr %>%
+  lapply(FUN = function(x) as.data.frame(t(x))) %>%
+  lapply(FUN = rownames_to_column, var = "cell_barcode") %>%
+  lapply(FUN = gather, key = "gene", value = "txs", -cell_barcode) %>%
+  bind_rows(.id = "sample")
+
+# split barcode into i7 index and cell barcode, and add variable for 10x lane
+gene_expr_l <- gene_expr_l %>%
+  separate(col = cell_barcode, into = c("i7_index", "cell"), sep = 8) %>%
+  left_join(select(exp_data, sample, name, i7_index), by = c("sample", "i7_index"))
+  
+# compute average gene expression per 10x lane
+avg_genex_lanes <- gene_expr_l %>%
+  group_by(sample, name, gene) %>%
+  summarize(avg_txs = mean(txs))
+
+# plot average gene expression
+ggplot(avg_genex_lanes, aes(x = name, y = avg_txs, color = name)) +
+  facet_wrap(~sample, scales = "free_x", ncol = 2) +
+  geom_jitter(width = 0.25, alpha = 0.5) +
+  geom_boxplot(color = "black", fill = NA, notch = TRUE, outlier.shape = NA) +
+  labs(x = "10x lane", y = "Average transcripts per gene", title = "Transcripts per gene") +
+  scale_y_log10() +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "none")
+```
+
+## Pairwise correlation
+Pairwise correlation plots for average expression per gene between different 10x lanes are created.
+
+```{r pairwisePlots, fig.height=10, fig.width=10}
+# calculate log10 average gene expression and reformat
+avg_genex_log10 <- mutate(avg_genex_lanes, avg_txs = log10(avg_txs))
+
+# split by sample and reformat
+avg_genex_log10 <- avg_genex_log10 %>%
+  split(f = .$sample) %>%
+  lapply(spread, key = "name", value = "avg_txs")
+
+# plot pairwise correlations between 10x lanes
+plots <- lapply(avg_genex_log10, FUN = function(x) ggpairs(x, columns = 3:ncol(x),
+           title = unique(x$sample), progress = FALSE) )
+
+# print plots
+for (plot in plots) print(plot)
+```
+
+## Principal component analysis
+Principal component analysis (PCA) is performed on gene expression data to check whether any
+outliers can be identified, wich could be explained by batch effects caused by different 10x lanes.
+Because the transfected CROP-seq vectors are highly variable and not present in every cell, this
+analysis is only performed with expression data on genes.
+
+```{r PCAgenex, fig.height=8, fig.width=8}
+# convert gene expression into data matrices and transpose for pca
+genex_mat <- lapply(gene_expr, FUN = function(x) t(data.matrix(x)) )
+
+# create experimental meta data for every cell
+exp_data_cells <- genex_mat %>%
+  lapply(FUN = function(x) data.frame(cell = rownames(x), stringsAsFactors = FALSE) ) %>%
+  bind_rows(.id = "sample") %>%
+  mutate(i7_index = substr(cell, start = 1, stop = 8)) %>%
+  left_join(select(exp_data, sample, i7_index, chip_10x, lane_10x, bead_vial_10x, name),
+            by = c("sample", "i7_index")) %>%
+  rename(lane_number_10x = lane_10x, sample_id_10x = name) %>%
+  split(f = .$sample)
+  
+# perform PCA on DGE data
+pca_genex <- lapply(genex_mat, FUN = prcomp, scale. = TRUE)
+
+# function to plot pca colored by experimental variable 
+plot_pca <- function(var, pca_obj, title = NULL) {
+  fviz_pca_ind(pca_obj, habillage = var, label = "none", invisible = "quali", title = title)
+}
+
+# plot pcs 1 & 2 colored by experimental meta data
+pca_plots_chr11 <- lapply(colnames(exp_data_cells[["11iScreen1"]][, -c(1:3)]), FUN = function(x) {
+  plot_pca(var = exp_data_cells[["11iScreen1"]][, x], pca_obj = pca_genex[["11iScreen1"]],
+           title = x)
+})
+
+pca_plots_chr8 <- lapply(colnames(exp_data_cells[["8iScreen1"]][, -c(1:3)]), FUN = function(x) {
+  plot_pca(var = exp_data_cells[["8iScreen1"]][, x], pca_obj = pca_genex[["8iScreen1"]], title = x)
+})
+
+# print plots
+grid.arrange(grobs = pca_plots_chr11, top = textGrob("11iScreen1", gp = gpar(fontsize = 15)))
+grid.arrange(grobs = pca_plots_chr8,  top = textGrob("8iScreen1", gp = gpar(fontsize = 15)))
+```
+
+***
+
+# CROP-seq vectors
+The number of detected transcripts and perturbations per transfected vector are assessed.
+
+```{r vectorStats}
+# number of transcripts per vector
+txs_per_vector <- vctr_expr %>%
+  lapply(FUN = rowSums) %>%
+  lapply(FUN = function(x) data.frame(vector = names(x), txs = x, stringsAsFactors = FALSE)) %>%
+  bind_rows(.id = "sample") %>%
+  mutate(vector = sub(vector_pattern, "", vector))
+
+# compute the number of cells per perturbation
+cells_per_vector <- perturb_status %>%
+  lapply(FUN = rowSums) %>%
+  lapply(FUN = function(x) data.frame(vector = names(x), cells = x, stringsAsFactors = FALSE)) %>%
+  bind_rows(.id = "sample")
+
+# merge transcripts and cells per vector and add vectors that were not detected
+vector_stats <- full_join(txs_per_vector, cells_per_vector, by = c("sample", "vector")) %>%
+  full_join(vectors, by = c("sample", "vector")) %>%
+  replace_na(replace = list(txs = 0, cells = 0))
+
+# calculate average vector txs per transfected cell (if possible)
+vector_stats <- vector_stats %>%
+  mutate(avg_txs = if_else(cells > 0, true = txs / cells, false = 0))
+
+# add label for control vectors and convert to long format
+vector_stats <- vector_stats %>%
+  mutate(type = if_else(grepl(vector, pattern = "^chr.+$"), true = "screen", false = "ctrl"))
+```
+
+```{r plotVectorStatsChr11, fig.width=7, fig.height=7}
+# reformat vector_stats for plotting
+vector_stats_plot <- vector_stats %>%
+  gather(key = "stat", value = "value", -c(sample, vector, type)) %>%
+  mutate(vector = paste(sample, vector, stat, sep = "_")) %>%
+  mutate(vector = fct_reorder(vector, value, .desc = TRUE)) %>%
+  mutate(stat = case_when(stat == "txs" ~ "Transcripts per vector",
+                          stat == "cells" ~ "Cells per vector",
+                          stat == "avg_txs" ~ "Average transcripts per cell"))
+
+# plot vector transcripts and cells for chromosome 11
+p1 <- vector_stats_plot %>%
+  filter(sample == "11iScreen1") %>%
+  ggplot(., aes(x = value)) +
+  facet_wrap(~stat, scales = "free", ncol = 1) +
+  geom_histogram(bins = 50) +
+  labs(x = "Transcripts / Cells", title = "11iScreen1") +
+  theme_bw()
+
+p2 <- vector_stats_plot %>%
+  filter(sample == "11iScreen1") %>%
+  ggplot(., aes(x = vector, y = value, color = type)) +
+  facet_wrap(~stat, scales = "free", ncol = 1) +
+  geom_point() +
+  geom_rug(color = "black", alpha = 0.1, sides = "l") +
+  scale_color_manual(values = c("ctrl" = "firebrick2", "screen" = "steelblue3")) +
+  labs(x = "Vector", y = "Transcripts / Cells", title = "", color = "Vector type") +
+  scale_x_discrete(expand = c(0.06, 0)) +
+  theme_bw() +
+  theme(axis.text.x = element_blank(), axis.ticks.x = element_blank(), panel.grid = element_blank())
+
+layout <- rbind(c(1, 1, 2, 2, 2))
+grid.arrange(p1, p2, ncol = 2, layout_matrix = layout)
+```
+
+```{r plotVectorStatsChr8, fig.width=7, fig.height=7}
+# plot vector transcripts and cells for chromosome 8
+p1 <- vector_stats_plot %>%
+  filter(sample == "8iScreen1") %>%
+  ggplot(., aes(x = value)) +
+  facet_wrap(~stat, scales = "free", ncol = 1) +
+  geom_histogram(bins = 50) +
+  labs(x = "Transcripts / Cells", title = "8iScreen1") +
+  theme_bw()
+
+p2 <- vector_stats_plot %>%
+  filter(sample == "8iScreen1") %>%
+  ggplot(., aes(x = vector, y = value, color = type)) +
+  facet_wrap(~stat, scales = "free", ncol = 1) +
+  geom_point() +
+  geom_rug(color = "black", alpha = 0.1, sides = "l") +
+  scale_color_manual(values = c("ctrl" = "firebrick2", "screen" = "steelblue3")) +
+  labs(x = "Vector", y = "Transcripts / Cells", title = "", color = "Vector type") +
+  scale_x_discrete(expand = c(0.06, 0)) +
+  theme_bw() +
+  theme(axis.text.x = element_blank(), axis.ticks.x = element_blank(), panel.grid = element_blank())
+
+layout <- rbind(c(1, 1, 2, 2, 2))
+grid.arrange(p1, p2, ncol = 2, layout_matrix = layout)
+```
+
+***
+
+# Gene expression
+
+## Correlation with validation experiments
+The average expression per gene (across all 10x lanes) is computed and correlated with data from the
+chr11 validation experiments.
+
+```{r genexCorrelation, fig.width=9, fig.height=7}
+# compute average gene expression per gene
+avg_genex <- gene_expr_l %>%
+  group_by(sample, gene) %>%
+  summarize(avg_txs = mean(txs))
+
+# get target genes for both samples
+sample_targets_chr11 <- target_genes %>%
+  filter((panel == "chr11_hs2" | screen == "validation"), !gene %in% c("HBG1", "HBG2")) %>%
+  mutate(sample = "11iScreen1")
+
+sample_targets_chr8 <- target_genes %>%
+  filter((panel %in% c("chr8_myc", "chr8_zfpm2") | screen == "validation"),
+         !gene %in% c("HBG1", "HBG2")) %>%
+  mutate(sample = "8iScreen1")
+
+sample_targets <- bind_rows(sample_targets_chr11, sample_targets_chr8) %>%
+  select(gene, sample, type = screen) %>%
+  mutate(type = if_else(type == "validation", true = "e-gene", false = "non_e-gene"))
+
+# average gene expression in validation experiments
+avg_genex_valid <- valid_dge %>%
+  lapply(FUN = gather, key = "cell", value = "txs", -GENE) %>%
+  bind_rows(.id = "sample") %>%
+  mutate(sample = paste0(sub("iv2.*", "", sample), "iScreen1")) %>%
+  rename(gene = GENE) %>%
+  right_join(sample_targets, by = c("sample", "gene")) %>%
+  group_by(sample, gene, type) %>%
+  summarize(avg_txs_valid = mean(txs))
+
+# merge with screen avg genex datasets
+avg_genex_merged <- full_join(avg_genex, avg_genex_valid, by = c("sample", "gene"))
+
+# correlation plot
+ggplot(avg_genex_merged, aes(x = avg_txs_valid, y = avg_txs, color = type)) +
+  facet_wrap(~sample) +
+  geom_abline() +
+  geom_point() +
+  geom_text_repel(data = filter(avg_genex_merged, type == "e-gene" | gene %in% c("STK3", "PGAP2")),
+                  aes(label = gene), box.padding = unit(3, "lines"), color = "gray50") +
+  labs(title = "Average gene expression", x = "Transcripts validation", y = "Transcripts screen",
+       color = "Type") +
+  scale_color_manual(values = c("e-gene" = "firebrick2", "non_e-gene" = "steelblue3")) +
+  scale_x_log10() +
+  scale_y_log10() +
+  coord_fixed() +
+  theme_bw()
+```
+
+## Control perturbation effects
+Data on positive control perturbations are extracted and the log fold change in gene expression is
+calculated between cells perturbed for control perturbations and non-targeting controls.
+
+```{r controlPerturbations}
+# only retain perturbation status on control perturbations
+ctrl_perts <- perturb_status %>%
+  lapply(FUN = rownames_to_column, var = "vector") %>%
+  lapply(FUN = function(x) x[!grepl(x$vector, pattern = "^chr.+$"), ] ) %>%
+  lapply(FUN = function(x) x[, c(TRUE, colSums(x[, -1]) > 0)] ) %>%  # remove cells without any pert
+  lapply(FUN = gather, key = "cell_barcode", value = "pert", -vector) %>%
+  bind_rows(.id = "sample") %>%
+  filter(pert > 0)  # only retain detected perturbation events
+
+# convert vector ids to grna targets
+ctrl_perts <- ctrl_perts %>%
+  mutate(vector = sub("_.+", "", vector),
+         vector = sub("-[ABCD]", "", vector)) %>%
+  rename(target = vector)
+
+# collapse vector perturbations
+ctrl_perts <- ctrl_perts %>%
+  group_by(sample, target, cell_barcode) %>%
+  summarize(pert = sum(pert))
+```
+
+```{r lfcPert}
+# get gene expression data for cells carrying control perturbations
+genex_pert <- gene_expr_l %>%
+  unite(col = "cell_barcode", i7_index, cell, sep = "") %>%
+  right_join(ctrl_perts, by = c("sample", "cell_barcode"))
+
+# calculate average gene expression of each gene in every perturbation
+avg_genex_pert <- genex_pert %>%
+  group_by(sample, target, gene) %>%
+  summarize(avg_txs = mean(txs)) %>%
+  ungroup()
+
+# extract negative control expression for every gene
+neg_ctrl <- avg_genex_pert %>%
+  filter(target == "non-targeting") %>%
+  select(sample, gene, neg_ctrl = avg_txs)
+
+# add to perturbed average expression levels
+avg_genex_pert <- avg_genex_pert %>%
+  filter(target != "non-targeting") %>%
+  left_join(neg_ctrl, by = c("sample", "gene"))
+
+# calculate log fold change for each gene in each perturbation
+lfc_pert <- avg_genex_pert %>%
+  filter(avg_txs > 0) %>%  # filter for genes with detected expression for the given perturbations
+  mutate(fc = avg_txs / neg_ctrl,
+         lfc = log2(fc))
+```
+
+```{r pertEffects, fig.height=18, fig.width=7}
+# list of perturbations and their target genes
+perturbations <- as.list(unique(lfc_pert$target))
+names(perturbations) <- unlist(perturbations)
+perturbations$HS2 <- c("HBB", "HBD", "HBE1", "HBG1", "HBG2")
+
+# add variable indicating if a gene is a target of the given perturbation
+lfc_pert <- lfc_pert %>%
+  group_by(target) %>%
+  mutate(type = if_else(gene %in% unlist(perturbations[target]),
+                        true = "target", false = "non_target"))
+
+# function to plot perturbation effects for one sample
+plot_pert_effects <- function(lfc_pert, title = NULL) {
+  ggplot(lfc_pert, aes(x = lfc, y = gene, color = type)) +
+    facet_wrap(~target, ncol = 3) +
+    geom_vline(xintercept = c(-1, 1), lty = "dashed", color = "darkgray") +
+    geom_vline(xintercept = 0, color = "darkgray") +
+    geom_point() +
+    geom_text_repel(data = filter(lfc_pert, abs(lfc) > 0.75), aes(label = gene),
+                    box.padding = unit(1.5, "lines"), color = "gray50") +
+    labs(title = title, x = "Expression log fold change") +
+    scale_color_manual(values = c("target" = "firebrick2", "non_target" = "steelblue3")) +
+    theme_bw() +
+    theme(axis.text.y = element_text(size = 5))
+}
+
+plot_pert_effects(filter(lfc_pert, sample == "11iScreen1"), title = "Perturbation LFC 11iScreen1")
+plot_pert_effects(filter(lfc_pert, sample == "8iScreen1"), title = "Perturbation LFC 8iScreen1")
+```
+
+## Potential false positives
+Non-target genes with LFC > 0.75 are considered potential false positives. Their expression levels
+and proportion of cells with detected expression (detection rate) are calculated. Low expression and
+detection rate could make the observed LFC more prone to noise, leading to false positive
+observations.
+
+```{r falsePos, fig.width=6, fig.height=6}
+# get average gene expression of non_targets that show a |lfc| > 0.75
+potential_fp <- filter(lfc_pert, type == "non_target", abs(lfc) > 0.75) %>%
+  ungroup() %>%
+  select(sample, gene) %>%
+  distinct() %>%
+  mutate(type = "False positive?")
+
+# get average expression over all cells and all genes and mark potential false positives
+avg_genex_fp <- avg_genex %>%
+  left_join(potential_fp, by = c("sample", "gene")) %>%
+  mutate(type = replace_na(type, "Other"))
+
+# plot average expression of these genes vs other gene
+p1 <- ggplot(avg_genex_fp, aes(x = type, y = avg_txs, fill = type, color = type)) +
+  facet_wrap(~sample, scales = "free_y") +
+  geom_dotplot(binaxis = "y", stackdir = "center", binwidth = 0.15) +
+  geom_text_repel(data = filter(avg_genex_fp, type == "False positive?"), aes(label = gene),
+                  color = "gray50") +
+  labs(title = "Average expression potential false positives", y = "Average expression") +
+  scale_color_manual(values = c("False positive?" = "firebrick2", "Other" = "steelblue3")) +
+  scale_fill_manual(values = c("False positive?" = "firebrick2", "Other" = "steelblue3")) +
+  scale_y_log10() +
+  theme_bw() +
+  theme(axis.title.x = element_blank(), legend.position = "none")
+
+# compute detection rate for each gene
+detection_rate <- gene_expr_l %>%
+  group_by(sample, gene) %>%
+  summarize(cells = sum(txs > 0), 
+            detect = cells / n()) %>%
+  left_join(potential_fp, by = c("sample", "gene")) %>%
+  mutate(type = replace_na(type, "Other"))
+
+# plot proportion of cells with zero expression
+p2 <- ggplot(detection_rate, aes(x = type, y = detect, fill = type, color = type)) +
+  facet_wrap(~sample, scales = "free_y") +
+  geom_dotplot(binaxis = "y", stackdir = "center", binwidth = 0.034) +
+  geom_text_repel(data = filter(detection_rate, type == "False positive?"), aes(label = gene),
+                  color = "gray50") +
+  labs(title = "Detection rate", y = " % cells with transcripts > 0") +
+  scale_color_manual(values = c("False positive?" = "firebrick2", "Other" = "steelblue3")) +
+  scale_fill_manual(values = c("False positive?" = "firebrick2", "Other" = "steelblue3")) +
+  scale_y_continuous(labels = scales::percent) +
+  theme_bw() +
+  theme(axis.title.x = element_blank(), legend.position = "none")
+
+# print plots
+grid.arrange(p1, p2, ncol = 1)
+```
+
+***
+
+# Source
+* <a download="screen_data_qc.Rmd" href="`r base64enc::dataURI(file = params$rmd,
+    mime = 'text/rmd', encoding = 'base64')`">R Markdown source file (to produce this document)</a>

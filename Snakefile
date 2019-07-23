@@ -20,8 +20,7 @@ rule all:
     analyses = ["results/tapseq_vs_cropseq.html",
                 "results/downsampled_dge.html",
                 "results/downsampled_target_reads.html",
-                "results/8iScreen1_qc.html",
-                "results/11iScreen1_qc.html",
+                "results/screen_data_qc.html",
                 "results/compare_covariates.html",
                 "results/map_enhancers.html",
                 "results/chromatin_analyses_screen.html"]

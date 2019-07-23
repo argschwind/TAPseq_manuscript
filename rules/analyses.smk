@@ -114,42 +114,24 @@ rule downsampled_target_reads:
     "../scripts/downsampled_target_reads.Rmd"
   
 # screen experiments -------------------------------------------------------------------------------
-    
-# chromosome 8 screen QC
-rule qc_8iScreen1:
+
+# QC of screen data (dge data and detected perturbations)
+rule screen_data_qc:
   input:
-    dge = "data/8iScreen1/dge.txt",
-    perturb_status = "data/8iScreen1/perturb_status.txt",
-    dge_stats = "data/8iScreen1/dge_summary.txt",
+    dge = expand("data/{sample}/dge.txt", sample = config["screen"]),
+    perturb_status = expand("data/{sample}/perturb_status.txt", sample = config["screen"]),
+    dge_stats = expand("data/{sample}/dge_summary.txt", sample = config["screen"]),
     valid_dge = expand("data/{sample}/downsampled_dge.txt", sample = config["validation"]),
     target_genes = "meta_data/target_genes_validation.csv",
     exp_data = "meta_data/screen_experimental_info.csv",
-    vctr_seqs = "meta_data/cropseq_vectors_chr8_screen.fasta"
+    vctr_seqs = expand("meta_data/cropseq_vectors_{chr}_screen.fasta", chr = ["chr8", "chr11"])
   output:
-    "results/8iScreen1_qc.html"
+    "results/screen_data_qc.html"
   params:
     vector_pattern = config["create_vector_ref"]["vector_prefix"]
   conda: "../envs/r_analyses.yml"
   script:
-    "../scripts/8iScreen1_qc.Rmd"
-  
-# chromosome 11 screen QC
-rule qc_11iScreen1:
-  input:
-    dge = "data/11iScreen1/dge.txt",
-    perturb_status = "data/11iScreen1/perturb_status.txt",
-    dge_stats = "data/11iScreen1/dge_summary.txt",
-    valid_dge = expand("data/{sample}/downsampled_dge.txt", sample = config["validation"]),
-    target_genes = "meta_data/target_genes_validation.csv",
-    exp_data = "meta_data/screen_experimental_info.csv",
-    vctr_seqs = "meta_data/cropseq_vectors_chr11_screen.fasta"
-  output:
-    "results/11iScreen1_qc.html"
-  params:
-    vector_pattern = config["create_vector_ref"]["vector_prefix"]
-  conda: "../envs/r_analyses.yml"
-  script:
-    "../scripts/11iScreen1_qc.Rmd"
+    "../scripts/screen_data_qc.Rmd"
     
 # collapse perturbation status by gRNA vector targets
 rule collapse_perturbations:
@@ -279,4 +261,3 @@ rule chromatin_analyses:
   conda: "../envs/r_map_enhancers.yml"
   script:
     "../scripts/chromatin_analyses_screen.Rmd"
-
