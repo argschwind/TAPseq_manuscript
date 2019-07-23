@@ -220,7 +220,9 @@ enh_perts <- perturb_status %>%
   })
 ```
 
-```{r cellsPerPert}
+**Cells per perturbation**
+
+```{r cellsPerPert, fig.width=5, fig.height=5}
 # count number of cells per perturbation
 cells_per_pert <- enh_perts %>%
   lapply(FUN = rowSums) %>%
@@ -234,21 +236,23 @@ cells_per_pert <- cells_per_pert %>%
   mutate(sample = paste0("Chr", sub("iScreen1", "", sample)))
   
 # plot number of cell per perturbation
-p1 <- ggplot(cells_per_pert, aes(x = sample, y = cells, fill = sample)) +
+ggplot(cells_per_pert, aes(x = sample, y = cells, fill = sample, color = sample)) +
   geom_violin() +
-  labs(y = "Cells", title = "Cells per perturbation") +
+  labs(y = "Cells") +
   scale_fill_manual(values = c("Chr11" = "indianred3", "Chr8" = "steelblue")) +
+  scale_color_manual(values = c("Chr11" = "indianred3", "Chr8" = "steelblue")) +
   scale_y_continuous(breaks = seq(0, 600, 100)) +
   theme_bw() +
-  theme(text = element_text(size = 20), legend.position = "none", axis.title.x = element_blank(),
+  theme(text = element_text(size = 28), legend.position = "none", axis.title.x = element_blank(),
         panel.grid = element_blank())
 
 # save plot for manuscript
-ggsave(p1, filename = here("results/plots", "cells_per_pert.pdf"), device = "pdf", width = 5, 
-       height = 5)
+ggsave(here("results/plots", "cells_per_pert.pdf"), device = "pdf", width = 5, height = 5)
 ```
 
-```{r pertsPerCell, fig.width=10, fig.height=5}
+**Perturbations per cell**
+
+```{r pertsPerCell, fig.width=7, fig.height=5}
 # count number of perturbations per cell
 perts_per_cell <- perturb_status %>%
   lapply(FUN = colSums) %>%
@@ -263,28 +267,31 @@ perts_per_cell_hist <- perts_per_cell %>%
   mutate(perts = factor(perts, levels = seq(0, max(.$perts))))
 
 # plot perturbations per cell histogram
-p2 <- ggplot(perts_per_cell_hist, aes(x = perts, y = cells / 1000, fill = sample)) +
+ggplot(perts_per_cell_hist, aes(x = perts, y = cells / 1000, fill = sample)) +
   geom_bar(stat = "identity", position = "dodge") +
-  labs(x = "Enhancer perturbations per cell", y = "Cells (x 1000)",
+  labs(x = "Perturbations per cell", y = "Cells (x 1000)",
        fill = "Region:") +
   scale_fill_manual(values = c("Chr11" = "indianred3", "Chr8" = "steelblue")) +
+  scale_x_discrete(drop = FALSE) +
   theme_bw() +
-  theme(text = element_text(size = 20), legend.position = "top", panel.grid = element_blank())
+  theme(text = element_text(size = 22), legend.text = element_text(size = 25),
+        legend.position = "top", panel.grid = element_blank())
 
 # save plot for manuscript
-ggsave(p2, filename = here("results/plots", "perts_per_cell.pdf"), device = "pdf", width = 5, 
-       height = 5)
-
-# print plots
-grid.arrange(p1, p2, ncol = 2)
+ggsave(here("results/plots", "perts_per_cell.pdf"), device = "pdf", width = 7,  height = 5)
 ```
 
 ## Number of cis-enhancers per gene
-The number of cis-enhancers per gene are counted and plotted.
+Cis enhancer gene pairs are extracted by selecting pairs within the same regions and at least 1kb
+away from the target genes TSS. Furthermore, any significant hits that lead to an increase in
+expression of their target genes are filtered out, as they probably do not act through enhancer
+activation repression. The number of cis-enhancers per gene are counted and plotted.
 
-```{r enhPerGene, fig.width=5, fig.height=4.5}
-# extract cis enhancer - gene pairs
-cis_enh_perts <- filter(results, enh_type == "cis", abs(dist_to_tss) >= 1000)
+```{r enhPerGene, fig.width=5, fig.height=5}
+# extract cis enhancer - gene pairs and remove significant pairs that increase gene expression
+cis_enh_perts <- results %>%
+  filter(enh_type == "cis", abs(dist_to_tss) >= 1000) %>%
+  filter(!(significant == "sig" & logFC > 0))
 
 # count the number of enhancers for each gene
 enh_per_gene <- cis_enh_perts %>%
@@ -311,16 +318,16 @@ enh_counts <- enh_per_gene %>%
 # plot number of genes per enhancer count
 ggplot(enh_counts, aes(x = factor(enh, levels = seq_len(max(enh))), y = genes, fill = sample)) +
   geom_bar(stat = "identity", position = "dodge") +
-  labs(x = "Enhancers", y = "Genes", title = "Enhancers per gene",
-       fill = "Region") +
+  labs(x = "Enhancers", y = "Genes",
+       fill = "Region:") +
   scale_fill_manual(values = c("Chr11" = "indianred3", "Chr8" = "steelblue")) +
   scale_x_discrete(drop = FALSE) +
   theme_bw() +
-  theme(text = element_text(size = 20), legend.position = c(0.84, 0.82),
-        panel.grid = element_blank())
+  theme(text = element_text(size = 25), panel.grid = element_blank(),
+        legend.position = c(0.8, 0.85))
 
 # save plot for manuscript
-ggsave(here("results/plots", "enhancers_per_gene.pdf"), device = "pdf", width = 5, height = 4.5)
+ggsave(here("results/plots", "enhancers_per_gene.pdf"), device = "pdf", width = 5, height = 5)
 ```
 
 ## P-value vs distance to TSS
@@ -373,40 +380,40 @@ cis_enh_perts_plot <- cis_enh_perts_plot %>%
 p1 <- ggplot(cis_enh_perts_plot, aes(x = abs(dist_to_tss) / 1e6, y = neg_log10_pvalue,
                                      color = prop_grna_hits)) +
     labs(x = "Distance to TSS (Mb)", y = expression(-log[10] ~ p - value),
-         color = "Confidence\n(prop. gRNA hits)",
-         title = "Association strength vs. distance to TSS") +
-    geom_point(data = filter(cis_enh_perts_plot, significant == "non_sig")) +
-    geom_point(data = filter(cis_enh_perts_plot, significant == "sig")) +
+         color = "Confidence") +
+    geom_point(data = filter(cis_enh_perts_plot, significant == "non_sig"), size = 3.5) +
+    geom_point(data = filter(cis_enh_perts_plot, significant == "sig"), size = 3.5) +
     scale_color_gradient(low = "blue", high = "orangered", na.value = "gray69") +
     theme_bw() +
-    theme(text = element_text(size = 20), panel.grid = element_blank())
+    theme(text = element_text(size = 25), panel.grid = element_blank())
 
 # same plot, but with logarithmic distance
 p2 <- ggplot(cis_enh_perts_plot, aes(x = abs(dist_to_tss) / 1e6, y = neg_log10_pvalue,
                                      color = prop_grna_hits)) +
     geom_smooth(data = filter(cis_enh_perts_plot, significant == "sig"),
-                method = "loess", se = FALSE, color = "black") +
+                method = "loess", se = FALSE, color = "black", lwd = 2) +
     labs(x = "Distance to TSS (Mb)", y = expression(-log[10] ~ p - value)) +
-    geom_point(data = filter(cis_enh_perts_plot, significant == "non_sig")) +
-    geom_point(data = filter(cis_enh_perts_plot, significant == "sig")) +
+    geom_point(data = filter(cis_enh_perts_plot, significant == "non_sig"), size = 2.5) +
+    geom_point(data = filter(cis_enh_perts_plot, significant == "sig"), size = 2.5) +
     scale_x_log10(breaks = c(0.01, 0.1, 1, 10), labels = c("0.01", "0.1", "1", "10")) +
     scale_color_gradient(low = "blue", high = "orangered", na.value = "gray69") +
     theme_bw() +
-    theme(text = element_text(size = 15), axis.title = element_blank(), legend.position = "none",
+    theme(text = element_text(size = 20), axis.title = element_blank(), legend.position = "none",
           panel.grid = element_blank(), plot.background = element_rect(fill = NA))
 
 # add logarithmic plot as inset of linear plot
 p1 + 
   annotation_custom(
     grob = ggplotGrob(p2),
-    xmin = 20,
-    xmax = 55,
+    xmin = 18,
+    xmax = 56,
     ymin = 40,
-    ymax = 120
+    ymax = 122
   )
 
 # save plot for manuscript
 ggsave(here("results/plots", "enh_pval_vs_dist.pdf"), device = "pdf", width = 8, height = 5)
+ggsave(here("results/plots", "enh_pval_vs_dist.png"), device = "png", width = 8, height = 5)
 ```
 
 ## Distance to TSS across confidence levels
@@ -591,7 +598,7 @@ nearest_per_hit %>%
   gather(key = "stat", value = "value", -is_nearest) %>%
   ggplot(., aes(x = factor(is_nearest), y = value)) +
   facet_wrap(~stat, ncol = 1, scales = "free") +
-  geom_boxplot(fill = "steelblue3", notch = TRUE) +
+  geom_boxplot(fill = "steelblue3") +
   theme_bw()
 ```
 
