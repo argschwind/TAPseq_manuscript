@@ -56,10 +56,12 @@ functionally verified enhancers.
 The fold change over control signal of different enhancer and transcription relevant chromatin marks
 is computed for the enhancer of every tested enhancer - target gene pair.
 ```{r loadChIPdata}
-# extract cis enhancer - gene pairs, and add "chr" to chromosome for use with ENCODE data
+# extract cis enhancer - gene pairs, remove significant pairs that increase gene expression and add
+# "chr" to chromosome for use with ENCODE data
 cis_enh_perts <- results %>%
   filter(enh_type == "cis", abs(dist_to_tss) >= 1000) %>%
-  mutate(enh_chr = paste0("chr", enh_chr),
+  filter(!(significant == "sig" & logFC > 0)) %>%
+    mutate(enh_chr = paste0("chr", enh_chr),
          gene_chr = paste0("chr", gene_chr))
 
 # get enhancer coordinates and convert to GRanges object
@@ -106,8 +108,8 @@ drawn, whose enhancers have at least one gene with similar distance to TSS as th
 enhancer - gene pair. To ensure an independent control sample, pairs involing drawn enhancers are
 removed from subsequent sampling. This ensures that no enhancer appears more than once in the
 control sample. The number of drawn controls per significant pair is set to 3, because with higher
-numbers there are simply not enough non-negative enhancers available for sampling without duplicated
-enhancers.
+numbers there are simply not enough non-significant enhancer - gene pairs available for sampling
+without duplicating enhancers.
 
 ```{r drawCtrlsFunction}
 # function to randomly draw n non-significant pairs for a significant association. any enhancers
@@ -119,7 +121,7 @@ draw_control_pairs <- function(sig, non_sig, n = 3) {
   bins <- bins[rep(seq_len(nrow(bins)), each = n), ]
   
   # iteratively select a random negative control for each bin and remove any pairs involving that
-  # enhancer from pool of non-significant pairs fro any subsequenct draws
+  # enhancer from pool of non-significant pairs for any subsequenct draws
   random_ctrls <- data.frame()
   for (i in seq_len(nrow(bins))) {
     
@@ -206,7 +208,7 @@ pw_tests <- compare_means(fc_over_ctrl ~ significant, group.by = "assay", data =
 ggplot(enh_plot, aes(x = significant, y = fc_over_ctrl + 1, fill = significant)) +
   facet_wrap(~assay, ncol = 2) +
   geom_boxplot(notch = TRUE) +
-  stat_pvalue_manual(pw_tests, label = "p adj. {p.adj.plot}", y.position = log10(145),
+  stat_pvalue_manual(pw_tests, label = "P adj. {p.adj.plot}", y.position = log10(145),
                      inherit.aes = FALSE) +
   labs(y = "Chromatin FC over control") +
   scale_x_discrete(labels = c("Non significant", "Significant")) +
@@ -227,7 +229,7 @@ Enhancer - gene pairs are classified as high-confidence, low-confidence and non-
 chromatin activity at the involved enhancer is compared between the classes.
 
 ### Plot chromatin activity versus confidence level {-}
-```{r chromMarksVsConf, warning=FALSE, fig.cap=cap, fig.width=7, fig.height=5}
+```{r chromMarksVsConf, warning=FALSE, fig.cap=cap, fig.width=9, fig.height=3.5}
 # add label for confidence level based on prop gRNA hits
 all_pairs_conf <- all_pairs %>%
   filter(!is.na(prop_grna_hits)) %>%
@@ -245,59 +247,57 @@ kw_tests <- compare_means(formula = fc_over_ctrl ~ conf, method = "kruskal.test"
                           data = all_pairs_conf, group.by = "assay") %>%
   mutate(p.adj.plot = if_else(p.adj < 0.001, true = "< 0.001",
                               false = paste("=", round(p.adj, digits = 2)))) %>%
-  mutate(group1 = "Low confidence")
+  mutate(group1 = "High confidence", group2 = "Low confidence")  # add fake groups for text in plots
 
 # plot chromatin signal for high-, low-confidence and non significant enhancer - gene pairs
 all_pairs_conf %>%
   filter(assay != "H3K27me3") %>%
   ggplot(., aes(x = conf, y = fc_over_ctrl + 1, fill = conf)) +
-  facet_wrap(~assay) +
+  facet_wrap(~assay, ncol = 4) +
   geom_boxplot(notch = TRUE) +
-  stat_pvalue_manual(data = filter(kw_tests, assay != "H3K27me3"), x = "group1", y.position = 175,
-                     label = "{method}, p adj {p.adj.plot}", remove.bracket = TRUE,
-                     inherit.aes = FALSE) +
-  labs(y = "Chromatin FC over control") +
-  scale_x_discrete(labels = c("High confidence", "Low confidence", "Non significant")) +
+  stat_pvalue_manual(data = filter(kw_tests, assay != "H3K27me3"), y.position = 175, size = 5.5,
+                     label = "P adj. {p.adj.plot}", remove.bracket = TRUE, inherit.aes = FALSE) +
+  labs(y = "FC over control") +
+  scale_x_discrete(labels = c("High conf.", "Low conf.", "Non sig.")) +
   scale_fill_manual(values = c("High confidence" = "goldenrod2",
                                "Low confidence" = "darkslategray3", "Non significant" = "gray")) +
   scale_y_log10(limits = c(NA, 180)) +
   theme_bw() +
-  theme(axis.title.x = element_blank(), legend.position = "none", text = element_text(size = 11),
-        panel.grid = element_blank())
+  theme(axis.title.x = element_blank(), legend.position = "none", text = element_text(size = 20),
+        panel.grid = element_blank(), axis.text.x = element_text(angle = 45, hjust = 1))
 
 # figure caption
 cap <- "Chromatin mark signal versus enhancer confidence level"
 
 # save plot for manuscript
-ggsave(here("results/plots", "chromatin_sig_vs_conf.pdf"), device = "pdf", width = 7,
-       height = 5)
+ggsave(here("results/plots", "chromatin_sig_vs_conf.pdf"), device = "pdf", width = 9,
+       height = 3.5)
 ```
 
-```{r chromMarksVsConfCheck, warning=FALSE, fig.cap=cap, fig.width=3.8, fig.height=3}
+```{r chromMarksVsConfCheck, warning=FALSE, fig.cap=cap, fig.width=2.8, fig.height=3.5}
 # plot H3K27me3 vs confidence levels
 all_pairs_conf %>%
   filter(assay == "H3K27me3") %>%
   ggplot(., aes(x = conf, y = fc_over_ctrl + 1, fill = conf)) +
   facet_wrap(~assay) +
   geom_boxplot(notch = TRUE) +
-  stat_pvalue_manual(data = filter(kw_tests, assay == "H3K27me3"), x = "group1", y.position = 175,
-                     label = "{method}, p adj {p.adj.plot}", remove.bracket = TRUE,
-                     inherit.aes = FALSE) +
-  labs(y = "Chromatin FC over control") +
-  scale_x_discrete(labels = c("High confidence", "Low confidence", "Non significant")) +
+  stat_pvalue_manual(data = filter(kw_tests, assay == "H3K27me3"), y.position = 10, size = 5.5,
+                     label = "P adj. {p.adj.plot}", remove.bracket = TRUE, inherit.aes = FALSE) +
+  labs(y = "FC over control") +
+  scale_x_discrete(labels = c("High conf.", "Low conf.", "Non sig.")) +
   scale_fill_manual(values = c("High confidence" = "goldenrod2",
                                "Low confidence" = "darkslategray3", "Non significant" = "gray")) +
-  scale_y_log10(limits = c(NA, 180)) +
+  scale_y_log10(limits = c(NA, 10)) +
   theme_bw() +
-  theme(axis.title.x = element_blank(), legend.position = "none", text = element_text(size = 11),
-        panel.grid = element_blank())
+  theme(axis.title.x = element_blank(), legend.position = "none", text = element_text(size = 20),
+        panel.grid = element_blank(), axis.text.x = element_text(angle = 45, hjust = 1))
 
 # figure caption
 cap <- "H3k27me3 signal versus enhancer confidence level"
 
 # save plot for manuscript
-ggsave(here("results/plots", "h3k27me3_vs_conf.pdf"), device = "pdf", width = 3.8,
-       height = 3)
+ggsave(here("results/plots", "h3k27me3_vs_conf.pdf"), device = "pdf", width = 2.8,
+       height = 3.5)
 ```
 
 <br>
@@ -315,20 +315,14 @@ pw_tests <- pw_tests %>%
   select(assay, group1, group2, p.format, p.signif, p.adj) %>%
   rename(p.value = p.format)
 
-# create html table
-pw_table <- pw_tests %>%
+# create pretty html table
+pw_tests %>%
   kable() %>%
   kable_styling(bootstrap_options = c("striped", "condensed"), full_width = FALSE,
                 position = "left")
-
-# print table
-pw_table
 ```
 
 ```{r savePwTests, message=FALSE}
-# make sure that phantomjs is installed, which is required to export the html table to a pdf file
-webshot::install_phantomjs()
-
-# save pairwise tests to file for manuscript
-save_kable(pw_table, file = "results/plots/chromatin_pairwise_tests.pdf")
+# save pairwise tests as .csv file
+write.csv(pw_tests, file = here("results/chromatin_pairwise_tests.csv"), row.names = FALSE)
 ```
