@@ -21,3 +21,4 @@ dependencies:
   - bioconductor-biocparallel=1.16.2
   - bioconductor-mast=1.8.1
   - bioconductor-rtracklayer=1.42.1
+  - bioconductor-hitc=1.26.0

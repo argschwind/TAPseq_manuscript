@@ -261,3 +261,17 @@ rule chromatin_analyses:
   conda: "../envs/r_map_enhancers.yml"
   script:
     "../scripts/chromatin_analyses_screen.Rmd"
+    
+# perform hi-c analysis
+rule hic_analysis:
+  input:
+    processed_results = "data/diff_expr_screen_nGenesCovar.csv",
+    hic_raw = expand("data/k562_chromatin_data/HiC/5kb_resolution_intrachromosomal/{chr}/MAPQG0/{chr}_5kb.RAWobserved",
+      chr = ["chr8", "chr11"]),
+    hic_norm = expand("data/k562_chromatin_data/HiC/5kb_resolution_intrachromosomal/{chr}/MAPQG0/{chr}_5kb.KRnorm",
+      chr = ["chr8", "chr11"])
+  output:
+    "results/hic_analysis.html"
+  conda: "../envs/r_map_enhancers.yml"
+  script:
+    "../scripts/hic_analysis.Rmd"

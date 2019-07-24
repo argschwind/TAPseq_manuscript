@@ -1,0 +1,465 @@
+---
+title: "Hi-C analysis"
+author: "Andreas Gschwind"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+params:
+  rmd: "chromatin_analyses_screen.Rmd"
+output:
+  bookdown::html_document2:
+    toc: yes
+---
+
+```{css echo=FALSE}
+/* Define a margin before every image element */
+img {
+  margin-top: 3em;
+}
+```
+
+```{r setup, include=FALSE}
+# set global chunk options
+knitr::opts_chunk$set(echo = FALSE)
+
+# disable dplyr progress
+options(dplyr.show_progress = FALSE)
+
+# attach required packages
+library(ggpubr)
+library(gridExtra)
+library(here)
+library(HiTC)
+library(Matrix)
+library(tidyverse)
+library(rtracklayer)
+```
+
+```{r loadResults}
+# load processed de output (includes confidence level and distance to TSS)
+results_file <- here("data", "diff_expr_screen_nGenesCovar.csv")
+results <- results_file %>%
+  read.csv(stringsAsFactors = FALSE) %>%
+  mutate(sample = paste0("chr", sub("iScreen1", "", sample)))
+
+# extract cis-interactions on chromosome 8 and 11 and add column identifying significant hits
+cis_enh_perts <- results %>%
+  filter(enh_type == "cis", abs(dist_to_tss) >= 1000) %>%
+  mutate(enh_chr = paste0("chr", enh_chr), gene_chr = paste0("chr", gene_chr),
+         significant = if_else(pval_adj_allTests < 0.05, true = "sig", false = "non_sig"))
+
+# remove validation controls on other chromosomes than the samples' target region
+cis_enh_perts <- filter(cis_enh_perts, sample == enh_chr)
+
+# download chain file for hg38 to hg19 liftover
+chain_url <- "http://hgdownload.cse.ucsc.edu/goldenPath/hg38/liftOver/hg38ToHg19.over.chain.gz"
+chain_file <- tempfile("hg38ToHg19", fileext = ".gz")
+download.file(chain_url, chain_file)
+system(paste("gunzip", chain_file))
+
+# import chain file
+hg38_to_hg19_chain <- import.chain(tools::file_path_sans_ext(chain_file))
+```
+
+```{r liftoverEnhancers}
+# extract hg38 enhancer coordinates
+enh_coords_hg38 <- cis_enh_perts %>%
+  select(perturbation, enh_chr, enh_start, enh_end) %>%
+  distinct() %>%
+  makeGRangesFromDataFrame(keep.extra.columns = TRUE, seqnames.field = "enh_chr",
+                           start.field = "enh_start", end.field = "enh_end")
+
+# liftover enhancers from hg38 to hg19 and convert to data.frame
+enh_coords_hg19 <- enh_coords_hg38 %>%
+  liftOver(chain = hg38_to_hg19_chain) %>%
+  unlist() %>%
+  as.data.frame() %>%
+  select(seqnames, start, end, perturbation) %>%
+  rename(enh_chr = seqnames, enh_start = start, enh_end = end)
+
+# replace tested enhancer - gene pairs hg38 enhancer coordinates with hg19 coordinates
+cis_enh_perts <- cis_enh_perts %>%
+  select(-c(enh_chr, enh_start, enh_end)) %>%
+  left_join(enh_coords_hg19, by = "perturbation")
+```
+
+```{r liftoverTSSs}
+# extract gene TSS coordinates
+gene_tss_hg38 <- cis_enh_perts %>%
+  select(gene, gene_chr, gene_tss, gene_strand) %>%
+  distinct() %>%
+  makeGRangesFromDataFrame(keep.extra.columns = TRUE, seqnames.field = "gene_chr",
+                           start.field = "gene_tss", end.field = "gene_tss",
+                           strand.field = "gene_strand")
+
+# liftover tss coordinates to hg19
+gene_tss_hg19 <- gene_tss_hg38 %>%
+  liftOver(chain = hg38_to_hg19_chain) %>%
+  unlist() %>%
+  as.data.frame() %>%
+  select(seqnames, start, strand, gene) %>%
+  rename(gene_chr = seqnames, gene_tss = start, gene_strand = strand)
+
+# replace gene tss hg38 coordinates with hg19 coordinates
+cis_enh_perts <- cis_enh_perts %>%
+  select(-c(gene_chr, gene_tss, gene_strand)) %>%
+  left_join(gene_tss_hg19, by = "gene")
+
+# recalculate distance to tss for hg19 coordinates
+cis_enh_perts <- cis_enh_perts %>%
+  mutate(enh_center = round((enh_start + enh_end) / 2)) %>%
+  mutate(dist_to_tss = if_else(gene_strand == "+", true  = enh_center - gene_tss,
+                                false = gene_tss - enh_center)) %>%
+  select(-enh_center)
+```
+
+```{r confidenceLevel}
+# add label for confidence level based on prop gRNA hits
+cis_enh_perts <- cis_enh_perts %>%
+  filter(!is.na(prop_grna_hits)) %>%
+  mutate(conf = case_when(
+    significant == "non_sig" ~ "Non significant",
+    significant == "sig" & prop_grna_hits >= 0.5 ~ "High confidence",
+    significant == "sig" & prop_grna_hits <  0.5 ~ "Low confidence")
+  )
+```
+
+# Prepare Hi-C data
+Hi-C data for k562 cells from Rao et al. 2014 is imported (5kb resolution). The provided
+normalization vectors are used to normalize the observed contacts (read counts). Data from the two
+chromosonal regions on chromosome 8 and 11 is extracted for any further analyses.
+```{r HiCimportFunction}
+# function to import HiC data from Rao et al for one chromosome and create a HTCexp object
+import_hic <- function(sparse_cm_file, chromosome, resolution, bins) {
+  
+  # load sparse contact matrix file (only observed contacts)
+  obs_contacts <- read.table(sparse_cm_file, col.names = c("i", "j", "M_ij"), sep = "\t")
+  
+  # get starting coordinates of assessed genomic bins at 5kb resolution
+  max_bin <- (bins - 1) * resolution
+  bin_starts <- seq(from = 0, to = max_bin, by = resolution)
+  
+  # create GRanges object containing all assessed bins for that chromosome
+  bin_coords <- GRanges(seqnames = chromosome,
+                        ranges = IRanges(start = bin_starts, end = bin_starts + resolution - 1,
+                                         names = paste0("bin_", seq_len(length(bin_starts))))
+                        )
+  
+  # convert starting coordinates of bins in sparse matrix input to bin ids by dividing by the
+  # resolution (and add 1 to get correct index)
+  obs_contacts_bins <- data.frame(i = round(obs_contacts$i / resolution + 1),
+                                  j = round(obs_contacts$j / resolution + 1), 
+                                  M_ij = obs_contacts$M_ij)
+  
+  # create sparse contact matrix from observed contacts
+  sparse_cm <- sparseMatrix(i = obs_contacts_bins$i, j = obs_contacts_bins$j,
+                            x = obs_contacts_bins$M_ij, symmetric = TRUE, dims = c(bins, bins))
+  
+  # create HTCexp object containing data for the given chromosome
+  HTCexp(intdata = sparse_cm, xgi = bin_coords, ygi = bin_coords)
+  
+}
+```
+
+```{r importHiC}
+hic_dir <- "/g/steinmetz/gschwind/data/HiC/K562/5kb_resolution_intrachromosomal/"
+
+# k562 intrachromosomal sparse matrix files for chromosomes 8 and 11
+chr8_scm_file  <- paste0(hic_dir, "chr8/MAPQG0/chr8_5kb.RAWobserved")
+chr11_scm_file <- paste0(hic_dir, "chr11/MAPQG0/chr11_5kb.RAWobserved")
+
+# import normalization vectors
+chr8_KRnorm  <- as.numeric(readLines(paste0(hic_dir, "chr8/MAPQG0/chr8_5kb.KRnorm")))
+chr11_KRnorm <- as.numeric(readLines(paste0(hic_dir, "chr11/MAPQG0/chr11_5kb.KRnorm")))
+
+# infer number of bins per chromosome based on the normalization vectors
+chr8_bins  <- length(chr8_KRnorm)
+chr11_bins <- length(chr11_KRnorm)
+
+# import hi-c data for these chromosomes
+chr8_hic  <- import_hic(chr8_scm_file,  chromosome = "chr8",  resolution = 5000, bins = chr8_bins)
+chr11_hic <- import_hic(chr11_scm_file, chromosome = "chr11", resolution = 5000, bins = chr11_bins)
+```
+
+```{r normalizeHiC}
+# function to normalize Hi-C data based on provided normalization vectors
+normalize_hic <- function(htc_obj, norm_vector) {
+  
+  # extract raw observed interaction matrix
+  raw_obs <- intdata(htc_obj)
+  
+  # create normalization matrix by computing the outer product of the normalization vector
+  norm_mat <- outer(norm_vector, norm_vector)
+  
+  # multiply observed interactions by normalization matrix and add back to HTC object
+  intdata(htc_obj) <- raw_obs / norm_mat
+  return(htc_obj)
+  
+}
+
+# normalize HiC data
+chr8_hic_norm  <- normalize_hic(chr8_hic,  norm_vector = chr8_KRnorm)
+chr11_hic_norm <- normalize_hic(chr11_hic, norm_vector = chr11_KRnorm)
+```
+
+```{r extractHiCregions}
+# infer chromosomal region range
+region_coords <- cis_enh_perts %>%
+  select(sample, enh_start, enh_end, gene_tss) %>%
+  gather(key = "key", value = "coord", -sample) %>%
+  group_by(sample) %>%
+  summarize(start = min(coord), end = max(coord))
+
+# calculate bin coordinates that contain the entire regions
+region_bins <- region_coords %>%
+  mutate(start = floor(start / 5000) * 5000,
+         end = ceiling(end / 5000) * 5000)
+
+# extract data for assessed regions
+chr8_region_hic <- extractRegion(chr8_hic_norm, MARGIN = c(1, 2), chr = "chr8",
+                                 from = pull(filter(region_bins, sample == "chr8"), start),
+                                 to = pull(filter(region_bins, sample == "chr8"), end))
+
+chr11_region_hic <- extractRegion(chr11_hic_norm, MARGIN = c(1, 2), chr = "chr11",
+                                  from = pull(filter(region_bins, sample == "chr11"), start),
+                                  to = pull(filter(region_bins, sample == "chr11"), end))
+```
+
+# Enhancer - gene pairs versus expected interaction frequency over distance
+Loci that are in close proximity have a higher expected interaction frequency than loci further from
+each other. To take this into account, the expected background interaction frequency is computed by
+looking at the interaction frequencies of all assessed genomic bins within the genomic regions. The
+interaction frequency of all bins as a function of the distance between bins is defined as the
+expected background of interactions.
+
+```{r, background, fig.height = 7, fig.width = 6}
+# function to extract interaction frequency versus distance between genomic bins
+intFreq_over_distance <- function(htc_obj, type = "background") {
+ 
+  # extract interaction matrix and compute distances between bins (in bp)
+  ints <- intdata(htc_obj)
+  dists <- intervalsDist(htc_obj)
+
+  # get unique interactions (upper triangle of matrix, including diagonal), because matrix is
+  # symmetric
+  ints_unique <- suppressMessages(ints[upper.tri(ints, diag = TRUE)])
+  dists_unique <- suppressMessages(dists[upper.tri(dists, diag = TRUE)])
+
+  # create data.frame containing interaction frequency across all in distances
+  int_over_dist <- data.frame(dist = dists_unique, int_freq = ints_unique, type = type,
+                              stringsAsFactors = FALSE)
+  
+  # sort according to distance
+  int_over_dist[order(int_over_dist$dist), ]
+   
+}
+
+# compute expected background interaction frequency by calculating the distance between all observed
+# genomic bins
+chr8_int_over_dist  <- intFreq_over_distance(chr8_region_hic)
+chr11_int_over_dist <- intFreq_over_distance(chr11_region_hic)
+
+# combine into one data.frame and remove any NaN values, which were introduced because the
+# normalization failed for certain bins
+expect_int <- bind_rows(chr8 = chr8_int_over_dist, chr11 = chr11_int_over_dist, .id = "sample") %>%
+  filter(!is.nan(int_freq))
+```
+
+## Enhancer - gene pairs
+The interaction frequency of all tested enhancer - gene pair computed, defined as the interaction
+frequency of the genomic bins overlapping the enhancer and the target genes TSS.
+
+```{r}
+# function to compute the interaction frequency for enhancer - gene pairs, by finding the hi-c 
+# genomic bins with overlap with the enhancer and the target gene tss. the interaction frequency of
+# the pair is then defined as the interaction frequency of these bins
+compute_int_freq <- function(pairs, htc_object) {
+
+  # add pair identifier
+  pairs$pair <- seq_len(nrow(pairs))
+  
+  # get coordinates of enhancer centers as GRanges object
+  enh_coords <- pairs %>%
+    mutate(enh_center = round((enh_start + enh_end) / 2)) %>%
+    select(enh_chr, enh_center) %>%
+    makeGRangesFromDataFrame(., seqnames.field = "enh_chr", start.field = "enh_center",
+                             end.field = "enh_center")
+  
+  # get gene tss coordinates as GRanges object
+  tss_coords <- pairs %>%
+    select(gene_chr, gene_tss) %>%
+    makeGRangesFromDataFrame(., seqnames.field = "gene_chr", start.field = "gene_tss",
+                             end.field = "gene_tss")
+  
+  # get bins overlapping for all enhancers and gene tss
+  hic_bins <- x_intervals(htc_object)
+  enh_bins <- findOverlaps(query = enh_coords, subject = hic_bins)
+  tss_bins <- findOverlaps(query = tss_coords, subject = hic_bins)
+  
+  # combine into one data.frame
+  enh_bins <- data.frame(pair = from(enh_bins), enh_bin = to(enh_bins))
+  tss_bins <- data.frame(pair = from(tss_bins), tss_bin = to(tss_bins))
+  bins <- full_join(enh_bins, tss_bins, by = "pair")
+  
+  # extract distance matrix between bins from htc object
+  dists <- intervalsDist(htc_object)
+  
+  # calculate distances between bins of enhancer gene pairs
+  dist_pairs <- dists[as.matrix(bins[, 2:3])]
+  dist_pairs <- data.frame(pair = bins$pair, dist_bins = dist_pairs)
+
+  # extract hi-c interaction matrix from htc object
+  intdata <- intdata(htc_object)
+  
+  # get interaction frequencies for all bins and add pair id
+  int_freq_pairs <- intdata[as.matrix(bins[, 2:3])]
+  int_freq_pairs <- data.frame(pair = bins$pair, int_freq = int_freq_pairs)
+  
+  # add interaction frequencies and bin distances to pairs to create output
+  pairs %>%
+    left_join(dist_pairs, by = "pair") %>%
+    left_join(int_freq_pairs, by = "pair") %>%
+    select(-pair)
+
+}
+```
+
+```{r intFreqPairs}
+# compute interaction frequencies for all tested enhancer - gene pairs
+chr8_pairs <- cis_enh_perts %>%
+  filter(enh_chr == "chr8", enh_chr == "chr8") %>%
+  compute_int_freq(., htc_object = chr8_region_hic)
+
+chr11_pairs <- cis_enh_perts %>%
+  filter(enh_chr == "chr11", enh_chr == "chr11") %>%
+  compute_int_freq(., htc_object = chr11_region_hic)
+
+# combine into one data.frame and extract relevant columns
+int_freq_pairs <- bind_rows(chr8_pairs, chr11_pairs) %>%
+  select(sample, dist_bins, int_freq, significant, conf) %>%
+  rename(dist = dist_bins, type = significant)
+
+# add to expected background frequencies
+int_freqs <- expect_int %>%
+  mutate(conf = as.character(NA)) %>%
+  bind_rows(int_freq_pairs)
+```
+
+```{r plotIntFreqs, fig.width=8, fig.height=5}
+# add an amount equal to bin size to distance for plotting on log10 scale and reformat labels
+int_freqs_plot <- int_freqs %>%
+  mutate(dist = dist + 5000) %>%
+  mutate(sample = sub("c", "C", sample)) %>%
+  mutate(conf = sub(" confidence", "", conf),
+         conf = sub("Non significant", "NS", conf))
+
+# plot interaction frequencies between
+p1 <- ggplot(drop_na(int_freqs_plot), aes(x = conf, y = int_freq + 1, color = conf)) +
+  facet_wrap(~sample, ncol = 1) +
+  geom_jitter(width = 0.2, size = 3) +
+  geom_boxplot(color = "black", outlier.shape = NA, fill = NA) +
+  labs(y = "Hi-C Interaction frequency", color = "Confidence:") +
+  scale_color_manual(values = c("High" = "goldenrod2",
+                                "Low" = "darkslategray3", "NS" = "gray")) +
+  scale_y_log10(limits = c(NA, 1200), breaks = c(1, 10, 100, 1000)) +
+  theme_bw() +
+  theme(text = element_text(size = 22), panel.grid = element_blank(),
+        axis.title.x = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1))
+
+# plot interaction frequency as a function of distance
+x_breaks <- c(0, 10^(4:10))  # breaks to draw on x axis (without added bin distance!)
+p2 <- ggplot(int_freqs_plot, aes(x = dist, y = int_freq + 1)) +
+  facet_wrap(~sample, ncol = 1) + 
+  geom_point(data = filter(int_freqs_plot, type == "background"), pch = 4, size = 2,
+             color = "black", alpha = 1) +
+  geom_point(data = filter(int_freqs_plot, type == "non_sig"), aes(color = conf), alpha = 1,
+             size = 3) +
+  geom_point(data = filter(int_freqs_plot, type == "sig"), aes(color = conf), size = 3) +
+  geom_smooth(data = filter(int_freqs_plot, type != "sig"), aes(linetype = type),
+              color = "indianred3", se = FALSE, lwd = 2) +
+  labs(x = "Distance (kb)", y = "Hi-C Interaction frequency", color = "Confidence",
+       linetype = "Type") +
+  scale_color_manual(values = c("High" = "goldenrod2",
+                                "Low" = "darkslategray3", "NS" = "gray")) +
+  scale_x_log10(breaks = x_breaks + 5000, labels = scales::comma(x_breaks / 1000)) +
+  scale_y_log10(limits = c(NA, 1200), breaks = c(1, 10, 100, 1000)) +
+  theme_bw() +
+  theme(text = element_text(size = 22), panel.grid = element_blank())
+
+# arrange plots with common legend (props ggpubr!)
+ggarrange(p1, p2 + theme(axis.title.y = element_blank()), ncol = 2, nrow = 1, common.legend = TRUE,
+          legend = "top", widths = c(1, 2))
+
+# save plot for manuscript
+ggsave(here("results/plots", "hic_interaction_frequencies.png"), device = "png", width = 8,
+       height = 5)
+ggsave(here("results/plots", "hic_interaction_frequencies.pdf"), device = "pdf", width = 8,
+       height = 5)
+```
+
+# Sample similar distance to TSS
+A similar approach as for the chromatin analysis is used to sample control pairs with the same
+HiC distance as significant enhancer gene pairs. The interaction frequency of significant pairs is
+then compared to that of sampled non-significant controls.
+
+```{r sampleDistance, fig.width=4, fig.height=7}
+# separate pair interaction frequencies into significant and non-significant interactions
+int_freq_sig <- filter(int_freqs, type == "sig")
+int_freq_nonSig <- filter(int_freqs, type == "non_sig")
+int_freq_background <- filter(int_freqs, type == "background")
+
+# function to randomly select non-significant controls with same distance
+sample_ctrls <- function(pair, nonSig_pairs, n = 2) {
+  
+  # get non-significant controls from the same sample and with the same bin distance
+  ctrl_pairs <- filter(nonSig_pairs, sample == pair$sample, dist == pair$dist)
+
+  # randomly select n controls
+  ctrls <- sample_n(ctrl_pairs, size = n, replace = FALSE)
+  
+  # add confidence level of pair for which the control was drawn
+  ctrls$conf <- pair$conf
+  
+  return(ctrls)
+  
+}
+
+# randomly sample non-significant controls
+set.seed(20190626)
+sampled_ctrls <- int_freq_sig %>%
+  rowwise() %>%
+  do(sample_ctrls(pair = ., nonSig_pairs = int_freq_nonSig, n = 3))
+
+# randomly sample background controls
+sampled_bckgrnd <- int_freq_sig %>%
+  rowwise() %>%
+  do(sample_ctrls(pair = ., nonSig_pairs = int_freq_background, n = 3))
+  
+# combine significant pairs and sampled controls
+all_int_pairs <- rbind(int_freq_sig, sampled_ctrls) %>%
+  mutate(conf_plot = case_when(
+    type == "sig" ~ conf,
+    type == "non_sig" ~ "non_sig",
+    type == "background" ~ "background"
+  ))
+
+# perform pairwise tests
+pw_tests <- compare_means(int_freq ~ type, group.by = "conf", data = all_int_pairs,
+                          method = "wilcox.test", p.adjust.method = "holm")
+
+# plot interaction frequencies
+ggplot(all_int_pairs, aes(x = fct_relevel(type, "sig", "non_sig"), y = int_freq + 1, fill = conf_plot)) +
+  facet_wrap(~conf, ncol = 1) +
+  geom_boxplot() +
+  suppressWarnings(stat_pvalue_manual(data = pw_tests, y.position = log10(450), inherit.aes = FALSE,
+                                      label = "p = {p.format}", size = 7, lwd = 0.75)) +
+  labs(y = "Hi-C interaction frequency") +
+  scale_fill_manual(values = c("High confidence" = "goldenrod2", "non_sig" = "gray",
+                               "Low confidence" = "darkslategray3", "background" = "black")) +
+  scale_y_log10(limits = c(NA, 1000)) +
+  scale_x_discrete(labels = c("Sig.", "Non sig.")) +
+  theme_bw() +
+  theme(text = element_text(size = 25), legend.position = "none", axis.title.x = element_blank())
+
+# save plot for manuscript
+ggsave(here("results/plots", "hic_sig_vs_nonsig.pdf"), device = "pdf", width = 4, height = 7)
+```
