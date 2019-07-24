@@ -242,6 +242,17 @@ rule download_chromatin_data:
   shell:
     "wget -O {output} {params.url}"
     
+# download encode chromatin assay alignments
+rule download_encode_bam:
+  output:
+    bam = "data/k562_chromatin_data/{assay}_encode_rep1_alignment.bam",
+    bai = "data/k562_chromatin_data/{assay}_encode_rep1_alignment.bai"
+  params:
+    url = lambda wildcards: config["chromatin_analyses"]["encode_bam"][wildcards.assay]
+  conda: "../envs/dropseq_tools.yml"
+  shell:
+    "wget -O {output.bam} {params.url} ; picard BuildBamIndex I={output.bam}"
+    
 # download Hi-C data
 rule download_hic_data:
   output:
@@ -285,3 +296,19 @@ rule hic_analysis:
   conda: "../envs/r_map_enhancers.yml"
   script:
     "../scripts/hic_analysis.Rmd"
+
+# perform activity by contact analysis
+rule abc_analysis:
+  input:
+    processed_results = "data/diff_expr_screen_nGenesCovar.csv",
+    encode_bam = expand("data/k562_chromatin_data/{assay}_encode_rep1_alignment.bam",
+                   assay = config["chromatin_analyses"]["encode_bam"]),
+    hic_raw = expand("data/k562_chromatin_data/HiC/5kb_resolution_intrachromosomal/{chr}/MAPQG0/{chr}_5kb.RAWobserved",
+                chr = ["chr8", "chr11"]),
+    hic_norm = expand("data/k562_chromatin_data/HiC/5kb_resolution_intrachromosomal/{chr}/MAPQG0/{chr}_5kb.KRnorm",
+                 chr = ["chr8", "chr11"])
+  output:
+    "results/abc_analysis.html"
+  conda: "../envs/r_map_enhancers.yml"
+  script:
+    "../scripts/abc_analysis_screen.Rmd"

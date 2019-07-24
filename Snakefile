@@ -24,7 +24,8 @@ rule all:
                 "results/compare_covariates.html",
                 "results/map_enhancers.html",
                 "results/chromatin_analyses_screen.html",
-                "results/hic_analysis.html"]
+                "results/hic_analysis.html",
+                "results/abc_analysis.html"]
 
 # functions to run workflow only partially ---------------------------------------------------------
 

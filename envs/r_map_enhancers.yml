@@ -16,6 +16,7 @@ dependencies:
   - r-gridExtra=2.3
   - r-here=0.1
   - r-kableextra=1.1.0
+  - r-proc=1.15.0
   - r-scales=1.0.0
   - r-tidyverse=1.2.1
   - bioconductor-biocparallel=1.16.2

@@ -1,0 +1,607 @@
+---
+title: "ABC analysis enhancer screen"
+author: "Andreas Gschwind"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+params:
+  rmd: "abc_analysis_screen.Rmd"
+output:
+  bookdown::html_document2:
+    toc: yes
+---
+
+```{css echo=FALSE}
+/* Define a margin before every image element */
+img {
+  margin-top: 3em;
+}
+```
+
+```{r setup, include=FALSE}
+# set global chunk options
+knitr::opts_chunk$set(echo = FALSE)
+
+# attach required packages
+library(GenomicAlignments)
+library(here)
+library(HiTC)
+library(Matrix)
+library(pROC)
+library(rtracklayer)
+library(tidyverse)
+```
+
+```{r loadResults}
+# load processed de output (includes confidence level and distance to TSS)
+results <- here(snakemake@input$processed_results) %>%
+  read.csv(stringsAsFactors = FALSE) %>%
+  mutate(sample = paste0("chr", sub("iScreen1", "", sample)))
+
+# extract cis-interactions on chromosome 8 and 11 and add column identifying significant hits
+cis_enh_perts <- results %>%
+  filter(enh_type == "cis", abs(dist_to_tss) >= 1000) %>%
+  mutate(enh_chr = paste0("chr", enh_chr), gene_chr = paste0("chr", gene_chr),
+         significant = if_else(pval_adj_allTests < 0.05, true = "sig", false = "non_sig"))
+
+# remove validation controls on other chromosomes than the samples' target region
+cis_enh_perts <- filter(cis_enh_perts, sample == enh_chr)
+```
+
+# Annotate chromatin
+Ever assessed enhancer is annotated for the number of chromatin assay ChIP-seq and DNAse-seq reads.
+The RPKM is calculated to normalize for both the sequencing depth and enhancer size. The geometric
+mean between H3K27ac and DNAse-seq is then calculatated for every site to compute an enhancer
+activity score proposed by .
+```{r annotateChrom}
+# extract hg38 enhancer coordinates
+enh_coords <- cis_enh_perts %>%
+  select(enh_chr, enh_start, enh_end, perturbation) %>%
+  distinct() %>%
+  makeGRangesFromDataFrame(keep.extra.columns = TRUE)
+
+# get coordinates of genomic regions and extend by 10 kb
+region_coords <- range(enh_coords)
+start(region_coords) <- start(region_coords) - 10000
+end(region_coords) <- end(region_coords) + 10000
+
+# bam files containing aligned reads
+bam_files <- here(snakemake@input$encode_bam)
+names(bam_files) <- sub("_encode_rep1_alignment.bam", "", basename(bam_files))
+
+# load aligned reads within the regions from bam files
+chrom_reads <- lapply(bam_files, FUN = readGAlignments, param = ScanBamParam(which = region_coords))
+
+# count the number of reads within each enhancer
+enh_chrom_reads <- chrom_reads %>%
+  lapply(FUN = countOverlaps, query = enh_coords) %>%
+  bind_cols()
+
+# combine with enhancer coordinates and convert to long format
+enh_chrom <- enh_coords %>%
+  data.frame(stringsAsFactors = FALSE) %>%
+  select(-strand) %>%
+  rename(enh_chr = seqnames, enh_start = start, enh_end = end) %>%
+  bind_cols(enh_chrom_reads) %>%
+  gather(key = assay, value = reads, -c(1:5))
+
+# normalize for sequencing depth and enhancer size by calculating rpkm
+enh_chrom_norm <- enh_chrom %>%
+  group_by(assay) %>%
+  mutate(rpkm = reads / (sum(reads) / 1e6) / (width / 1000))
+
+# convert to wide format add to enhancer gene pair results
+cis_enh_perts <- enh_chrom_norm %>%
+  select(-c(enh_chr, enh_start, enh_end, width, reads)) %>%
+  spread(key = "assay", value = "rpkm") %>%
+  left_join(x = cis_enh_perts, y = ., by = "perturbation")
+```
+
+# Annotate Hi-C
+Hi-C contact matrices from Rao et al., 2014 are imported and the contact frequency for each
+enhancer - gene pair is calculated.
+
+## Liftover enhancer and gene TSS coordinates
+Hi-C contact matrices are in hg19 annotation, so enhancer and gene TSS coordinates need to be lifted
+over from hg38 to hg19.
+```{r liftoverEnhancers}
+# download chain file for hg38 to hg19 liftover
+chain_url <- "http://hgdownload.cse.ucsc.edu/goldenPath/hg38/liftOver/hg38ToHg19.over.chain.gz"
+chain_file <- tempfile("hg38ToHg19", fileext = ".gz")
+download.file(chain_url, chain_file)
+system(paste("gunzip", chain_file))
+
+# import chain file
+hg38_to_hg19_chain <- import.chain(tools::file_path_sans_ext(chain_file))
+#closeAllConnections()  # close any open file connection
+
+# extract hg38 enhancer coordinates
+enh_coords_hg38 <- cis_enh_perts %>%
+  select(perturbation, enh_chr, enh_start, enh_end) %>%
+  distinct() %>%
+  makeGRangesFromDataFrame(keep.extra.columns = TRUE, seqnames.field = "enh_chr",
+                           start.field = "enh_start", end.field = "enh_end")
+
+# liftover enhancers from hg38 to hg19 and convert to data.frame
+enh_coords_hg19 <- enh_coords_hg38 %>%
+  liftOver(chain = hg38_to_hg19_chain) %>%
+  unlist() %>%
+  as.data.frame() %>%
+  select(seqnames, start, end, perturbation) %>%
+  rename(enh_chr = seqnames, enh_start = start, enh_end = end)
+
+# replace tested enhancer - gene pairs hg38 enhancer coordinates with hg19 coordinates
+cis_enh_perts <- cis_enh_perts %>%
+  select(-c(enh_chr, enh_start, enh_end)) %>%
+  left_join(enh_coords_hg19, by = "perturbation")
+```
+
+```{r liftoverTSSs}
+# extract gene TSS coordinates
+gene_tss_hg38 <- cis_enh_perts %>%
+  select(gene, gene_chr, gene_tss, gene_strand) %>%
+  distinct() %>%
+  makeGRangesFromDataFrame(keep.extra.columns = TRUE, seqnames.field = "gene_chr",
+                           start.field = "gene_tss", end.field = "gene_tss",
+                           strand.field = "gene_strand")
+
+# liftover tss coordinates to hg19
+gene_tss_hg19 <- gene_tss_hg38 %>%
+  liftOver(chain = hg38_to_hg19_chain) %>%
+  unlist() %>%
+  as.data.frame() %>%
+  select(seqnames, start, strand, gene) %>%
+  rename(gene_chr = seqnames, gene_tss = start, gene_strand = strand)
+
+# replace gene tss hg38 coordinates with hg19 coordinates
+cis_enh_perts <- cis_enh_perts %>%
+  select(-c(gene_chr, gene_tss, gene_strand)) %>%
+  left_join(gene_tss_hg19, by = "gene")
+
+# recalculate distance to tss for hg19 coordinates
+cis_enh_perts <- cis_enh_perts %>%
+  mutate(enh_center = round((enh_start + enh_end) / 2)) %>%
+  mutate(dist_to_tss = if_else(gene_strand == "+", true  = enh_center - gene_tss,
+                                false = gene_tss - enh_center)) %>%
+  select(-enh_center)
+```
+
+## Prepare Hi-C data
+Contact matrices for K562 cells from Rao et al. 2014 are imported (5kb resolution). The provided
+normalization vectors are used to normalize the observed contacts (read counts). Data from the two
+chromosonal regions on chromosome 8 and 11 is extracted for any further analyses.
+```{r HiCimportFunction}
+# function to import HiC data from Rao et al for one chromosome and create a HTCexp object
+import_hic <- function(sparse_cm_file, chromosome, resolution, bins) {
+  
+  # load sparse contact matrix file (only observed contacts)
+  obs_contacts <- read.table(sparse_cm_file, col.names = c("i", "j", "M_ij"), sep = "\t")
+  
+  # get starting coordinates of assessed genomic bins at 5kb resolution
+  max_bin <- (bins - 1) * resolution
+  bin_starts <- seq(from = 0, to = max_bin, by = resolution)
+  
+  # create GRanges object containing all assessed bins for that chromosome
+  bin_coords <- GRanges(seqnames = chromosome,
+                        ranges = IRanges(start = bin_starts, end = bin_starts + resolution - 1,
+                                         names = paste0("bin_", seq_len(length(bin_starts))))
+                        )
+  
+  # convert starting coordinates of bins in sparse matrix input to bin ids by dividing by the
+  # resolution (and add 1 to get correct index)
+  obs_contacts_bins <- data.frame(i = round(obs_contacts$i / resolution + 1),
+                                  j = round(obs_contacts$j / resolution + 1), 
+                                  M_ij = obs_contacts$M_ij)
+  
+  # create sparse contact matrix from observed contacts
+  sparse_cm <- sparseMatrix(i = obs_contacts_bins$i, j = obs_contacts_bins$j,
+                            x = obs_contacts_bins$M_ij, symmetric = TRUE, dims = c(bins, bins))
+  
+  # create HTCexp object containing data for the given chromosome
+  HTCexp(intdata = sparse_cm, xgi = bin_coords, ygi = bin_coords)
+  
+}
+```
+
+```{r importHiC}
+hic_dir <- "/g/steinmetz/gschwind/data/HiC/K562/5kb_resolution_intrachromosomal/"
+
+# k562 intrachromosomal sparse matrix files for chromosomes 8 and 11
+chr8_scm_file  <- paste0(hic_dir, "chr8/MAPQG0/chr8_5kb.RAWobserved")
+chr11_scm_file <- paste0(hic_dir, "chr11/MAPQG0/chr11_5kb.RAWobserved")
+
+# import normalization vectors
+chr8_KRnorm  <- as.numeric(readLines(paste0(hic_dir, "chr8/MAPQG0/chr8_5kb.KRnorm")))
+chr11_KRnorm <- as.numeric(readLines(paste0(hic_dir, "chr11/MAPQG0/chr11_5kb.KRnorm")))
+
+# infer number of bins per chromosome based on the normalization vectors
+chr8_bins  <- length(chr8_KRnorm)
+chr11_bins <- length(chr11_KRnorm)
+
+# import hi-c data for these chromosomes
+chr8_hic  <- import_hic(chr8_scm_file,  chromosome = "chr8",  resolution = 5000, bins = chr8_bins)
+chr11_hic <- import_hic(chr11_scm_file, chromosome = "chr11", resolution = 5000, bins = chr11_bins)
+```
+
+```{r normalizeHiC}
+# function to normalize Hi-C data based on provided normalization vectors
+normalize_hic <- function(htc_obj, norm_vector) {
+  
+  # extract raw observed interaction matrix
+  raw_obs <- intdata(htc_obj)
+  
+  # create normalization matrix by computing the outer product of the normalization vector
+  norm_mat <- outer(norm_vector, norm_vector)
+  
+  # multiply observed interactions by normalization matrix and add back to HTC object
+  intdata(htc_obj) <- raw_obs / norm_mat
+  return(htc_obj)
+  
+}
+
+# normalize HiC data
+chr8_hic_norm  <- normalize_hic(chr8_hic,  norm_vector = chr8_KRnorm)
+chr11_hic_norm <- normalize_hic(chr11_hic, norm_vector = chr11_KRnorm)
+```
+
+```{r extractHiCregions}
+# infer chromosomal region range
+region_coords <- cis_enh_perts %>%
+  select(sample, enh_start, enh_end, gene_tss) %>%
+  gather(key = "key", value = "coord", -sample) %>%
+  group_by(sample) %>%
+  summarize(start = min(coord), end = max(coord))
+
+# calculate bin coordinates that contain the entire regions
+region_bins <- region_coords %>%
+  mutate(start = floor(start / 5000) * 5000,
+         end = ceiling(end / 5000) * 5000)
+
+# extract data for assessed regions
+chr8_region_hic <- extractRegion(chr8_hic_norm, MARGIN = c(1, 2), chr = "chr8",
+                                 from = pull(filter(region_bins, sample == "chr8"), start),
+                                 to = pull(filter(region_bins, sample == "chr8"), end))
+
+chr11_region_hic <- extractRegion(chr11_hic_norm, MARGIN = c(1, 2), chr = "chr11",
+                                  from = pull(filter(region_bins, sample == "chr11"), start),
+                                  to = pull(filter(region_bins, sample == "chr11"), end))
+```
+
+## Enhancer - gene pairs
+The interaction frequency of all tested enhancer - gene pair computed, defined as the interaction
+frequency of the genomic bins overlapping the enhancer and the target genes TSS.
+```{r computeIntFreqFun}
+# function to compute the interaction frequency for enhancer - gene pairs, by finding the hi-c 
+# genomic bins with overlap with the enhancer and the target gene tss. the interaction frequency of
+# the pair is then defined as the interaction frequency of these bins
+compute_int_freq <- function(pairs, htc_object) {
+
+  # add pair identifier
+  pairs$pair <- seq_len(nrow(pairs))
+  
+  # get coordinates of enhancer centers as GRanges object
+  enh_coords <- pairs %>%
+    mutate(enh_center = round((enh_start + enh_end) / 2)) %>%
+    select(enh_chr, enh_center) %>%
+    makeGRangesFromDataFrame(., seqnames.field = "enh_chr", start.field = "enh_center",
+                             end.field = "enh_center")
+  
+  # get gene tss coordinates as GRanges object
+  tss_coords <- pairs %>%
+    select(gene_chr, gene_tss) %>%
+    makeGRangesFromDataFrame(., seqnames.field = "gene_chr", start.field = "gene_tss",
+                             end.field = "gene_tss")
+  
+  # get bins overlapping for all enhancers and gene tss
+  hic_bins <- x_intervals(htc_object)
+  enh_bins <- findOverlaps(query = enh_coords, subject = hic_bins)
+  tss_bins <- findOverlaps(query = tss_coords, subject = hic_bins)
+  
+  # combine into one data.frame
+  enh_bins <- data.frame(pair = from(enh_bins), enh_bin = to(enh_bins))
+  tss_bins <- data.frame(pair = from(tss_bins), tss_bin = to(tss_bins))
+  bins <- full_join(enh_bins, tss_bins, by = "pair")
+  
+  # extract distance matrix between bins from htc object
+  dists <- intervalsDist(htc_object)
+  
+  # calculate distances between bins of enhancer gene pairs
+  dist_pairs <- dists[as.matrix(bins[, 2:3])]
+  dist_pairs <- data.frame(pair = bins$pair, dist_bins = dist_pairs)
+
+  # extract hi-c interaction matrix from htc object
+  intdata <- intdata(htc_object)
+  
+  # get interaction frequencies for all bins and add pair id
+  int_freq_pairs <- intdata[as.matrix(bins[, 2:3])]
+  int_freq_pairs <- data.frame(pair = bins$pair, int_freq = int_freq_pairs)
+  
+  # add interaction frequencies and bin distances to pairs to create output
+  pairs %>%
+    left_join(dist_pairs, by = "pair") %>%
+    left_join(int_freq_pairs, by = "pair") %>%
+    select(-c(pair))
+
+}
+```
+
+```{r intFreqPairs}
+# compute interaction frequencies for all tested enhancer - gene pairs
+chr8_pairs <- cis_enh_perts %>%
+  filter(enh_chr == "chr8", enh_chr == "chr8") %>%
+  compute_int_freq(., htc_object = chr8_region_hic)
+
+chr11_pairs <- cis_enh_perts %>%
+  filter(enh_chr == "chr11", enh_chr == "chr11") %>%
+  compute_int_freq(., htc_object = chr11_region_hic)
+
+# combine into one data.frame
+pairs <- rbind(chr8_pairs, chr11_pairs)
+```
+
+# Activity by contact
+The activity by contact score is computed as proposed by Fulco et al.
+```{r activityScore, fig.width=10, fig.height=4}
+# function to calculate geometric mean
+gm_mean <- function(x, na.rm = TRUE){
+  exp(sum(log(x[x > 0]), na.rm = na.rm) / length(x))
+}
+
+# compute enhancer activity score
+pairs <- pairs %>%
+  rowwise() %>%
+  mutate(activity_score = gm_mean(c(`Dnase-seq`, H3K27ac)))
+
+# plot activity score vs interaction frequency
+ggplot(pairs, aes(x = int_freq + 1, y = activity_score, color = prop_grna_hits)) +
+  facet_wrap(~enh_chr, ncol = 2) +
+  geom_point(data = filter(pairs, significant == "non_sig"), color = "gray69") +
+  geom_point(data = filter(pairs, significant == "sig")) +
+  labs(x = "Hi-C interaction frequency", y = "Enhancer activity (DNAse + H3K27ac)",
+       title = "Enhancer activity vs Hi-C contact frequency") +
+  scale_color_gradient(low = "blue", high = "orangered", na.value = "gray69") +
+  scale_x_log10() +
+  scale_y_log10() +
+  theme_bw()
+```
+
+```{r abcScore, warning=FALSE, fig.height=7, fig.width=7}
+# compute abc score
+pairs <- pairs %>%
+  group_by(sample, gene) %>%
+  mutate(abc_score = activity_score * (int_freq + 1),
+         abc_score_norm = abc_score / sum(abc_score))
+
+# plot abc score vs distance to TSS
+ggplot(pairs, aes(x = abs(dist_to_tss), y = abc_score_norm, color = prop_grna_hits)) +
+  facet_wrap(~enh_chr, ncol = 1) +
+  geom_point(data = filter(pairs, significant == "non_sig"), color = "gray69",
+             alpha = 0.25) +
+  geom_point(data = filter(pairs, significant == "sig")) +
+  labs(x = "Distance to TSS", y = "ABC score", "ABC score vs distance to TSS") +
+  scale_color_gradient(low = "blue", high = "orangered", na.value = "gray69") +
+  scale_x_log10() +
+  scale_y_log10() +
+  theme_bw()
+```
+
+```{r, abcScoreVsPval, fig.height=3, fig.width=7}
+# plot abc score vs pvalue
+ggplot(pairs, aes(x = abc_score_norm, y = -log10(pvalue), color = significant)) +
+  facet_wrap(~enh_chr, ncol = 2) +
+  geom_point() +
+  labs(x = "ABC score", color = "Significant") +
+  scale_color_manual(values = c(sig = "steelblue", non_sig = "gray69")) +
+  theme_bw()
+```
+
+# AUROC
+The predictive power for different assays such as chromatin modifications, proximity and ABC score
+is estimated using a simple AUROC analysis. For each predictor the AUROC is calculated to quantify
+their predictive power to identify true enhancer - gene pairs.
+
+## All pairs
+```{r, auroc, message=FALSE, fig.height=4, fig.width=6}
+# function to calculate area under roc curve
+calc_auroc <- function(category, prediction) {
+  
+  # order by prediction
+  dat <- data.frame(category, prediction) %>%
+    arrange(desc(prediction))
+  
+  # compute auc
+  roc_obj <- roc(dat$category, dat$prediction)
+  as.numeric(auc(roc_obj))
+  
+}
+
+# convert distance to TSS to absolute value and change label of significant hits
+pairs <- pairs %>%
+  mutate(dist_to_tss = abs(dist_to_tss),
+         significant = if_else(significant == "sig", true = 1, false = 0))
+  
+# only retain data on pairs that have at least one significant hit
+sig_pairs <- pairs %>%
+  group_by(sample, gene) %>%
+  filter(sum(significant) > 0) %>%
+  select(-c(2, 5:13, 22:28, 31))
+
+# convert to long format and set pretty predictor names
+sig_pairs_long <- sig_pairs %>%
+  gather(key = "predictor", value = "predictor_value",
+         -c(sample, perturbation, gene, significant)) %>%
+  mutate(predictor = case_when(
+    predictor == "int_freq" ~ "Hi-C int. freq.",
+    predictor == "dist_to_tss" ~ "Distance to TSS",
+    predictor == "activity_score" ~ "Activity score",
+    predictor == "abc_score_norm" ~ "ABC score",
+    TRUE ~ predictor))
+
+# calculate auroc for all genes with significant enhancers
+auroc <- sig_pairs_long %>%
+  group_by(sample, predictor) %>%
+  summarize(auc = calc_auroc(category = significant, prediction = predictor_value))
+
+# plot auroc per gene and predictor
+ggplot(auroc, aes(x = predictor, y = auc)) +
+  facet_wrap(~sample, ncol = 2) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  labs(y = "AUC", title = "AUROC") +
+  coord_flip() +
+  theme_bw() +
+  theme(axis.title.x = element_blank())
+```
+
+```{r avgAuroc, fig.height=5, fig.width=7}
+# calculate mean and median auroc
+auroc_stats <- auroc %>%
+  group_by(predictor) %>%
+  summarize(avg_auroc = mean(auc),
+            med_auroc = median(auc))
+
+# add predictor type for plot
+auroc_stats <- auroc_stats %>%
+  mutate(type = case_when(
+    predictor %in% c("H3K27ac", "H3K27me3", "H3K4me1", "H3K4me3") ~ "Histone PTM",
+    predictor %in% c("Hi-C int. freq.", "Distance to TSS") ~ "Proximity",
+    predictor %in% c("Activity score", "ABC score") ~ "ABC model",
+    predictor == "Dnase-seq" ~ "DNA accessibility",
+    predictor == "POLR2A" ~ "Transcription"))
+
+# plot average auroc per predictor
+ggplot(auroc_stats, aes(x = fct_reorder(predictor, desc(avg_auroc)), y = avg_auroc, fill = type)) +
+  geom_bar(stat = "identity") +
+  labs(x = "Predictor", y = "Average AUROC", fill = "Type") +
+  scale_fill_brewer(palette = "Set1") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), axis.title.x = element_blank())
+```
+
+## Enhancers within 1Mb
+```{r, auroc1Mb, message = FALSE, fig.height=4, fig.width=6}
+# only retain data on pairs that have at least one significant hit within 5 Mb of the TSS
+sig_pairs_1mb <- pairs %>%
+  group_by(sample, gene) %>%
+  filter(dist_to_tss <= 1e6) %>%
+  filter(sum(significant) > 0) %>%
+  select(-c(2, 5:13, 22:28, 31))
+
+# compute number of enhancers per gene
+enh_per_gene <- summarize(sig_pairs_1mb, enhancers = n())
+
+# plot number of enhancers per gene
+ggplot(enh_per_gene, aes(x = gene, y = enhancers)) +
+  facet_wrap(~sample, scales = "free_x") +
+  geom_bar(stat = "identity") +
+  labs(x = "Gene", y = "Enhancers", title = "Enhancers per gene within 1Mb") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# convert to long format and set pretty predictor names
+sig_pairs_1mb_long <- sig_pairs_1mb %>%
+  gather(key = "predictor", value = "predictor_value",
+         -c(sample, perturbation, gene, significant)) %>%
+  mutate(predictor = case_when(
+    predictor == "int_freq" ~ "Hi-C int. freq.",
+    predictor == "dist_to_tss" ~ "Distance to TSS",
+    predictor == "activity_score" ~ "Activity score",
+    predictor == "abc_score_norm" ~ "ABC score",
+    TRUE ~ predictor))
+
+# calculate auroc for all genes with significant enhancers
+auroc_1mb <- sig_pairs_1mb_long %>%
+  group_by(sample, predictor) %>%
+  summarize(auc = calc_auroc(category = significant, prediction = predictor_value))
+
+# plot auroc per gene and predictor
+ggplot(auroc_1mb, aes(x = predictor, y = auc)) +
+  facet_wrap(~sample, ncol = 2) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  labs(y = "AUC", title = "AUROC 1Mb") +
+  coord_flip() +
+  theme_bw() +
+  theme(axis.title.x = element_blank())
+```
+
+
+```{r avgAuroc1Mb, fig.height=5, fig.width=7}
+# calculate mean and median auroc
+auroc_stats_1mb <- auroc_1mb %>%
+  group_by(predictor) %>%
+  summarize(avg_auroc = mean(auc),
+            med_auroc = median(auc))
+
+# add predictor type for plot
+auroc_stats_1mb <- auroc_stats_1mb %>%
+  mutate(type = case_when(
+    predictor %in% c("H3K27ac", "H3K27me3", "H3K4me1", "H3K4me3") ~ "Histone PTM",
+    predictor %in% c("Hi-C int. freq.", "Distance to TSS") ~ "Proximity",
+    predictor %in% c("Activity score", "ABC score") ~ "ABC model",
+    predictor == "Dnase-seq" ~ "DNA accessibility",
+    predictor == "POLR2A" ~ "Transcription"))
+
+# plot average auroc per predictor
+ggplot(auroc_stats_1mb, aes(x = fct_reorder(predictor, desc(avg_auroc)), y = avg_auroc,
+                            fill = type)) +
+  geom_bar(stat = "identity") +
+  labs(x = "Predictor", y = "Average AUROC", fill = "Type") +
+  scale_fill_brewer(palette = "Set1") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), axis.title.x = element_blank())
+```
+
+# ROC within 1Mb
+```{r, roc, message=FALSE, fig.height=9, fig.width=5}
+# function to calculate area under roc curve
+calc_roc <- function(category, prediction) {
+  
+  # order by prediction
+  dat <- data.frame(category, prediction) %>%
+    arrange(desc(prediction))
+  
+  # compute roc
+  roc_obj <- roc(dat$category, dat$prediction)
+  
+  # return tpr and fpr
+  data.frame(TPR = rev(roc_obj$sensitivities), FPR = rev(1 - roc_obj$specificities))
+
+}
+
+# calculate roc for all genes with significant enhancers
+roc_1mb <- sig_pairs_1mb_long %>%
+  group_by(sample, predictor) %>%
+  do(calc_roc(category = .$significant, prediction = .$predictor_value))
+
+# order according to average auroc
+order <- auroc_stats_1mb %>%
+  arrange(desc(avg_auroc)) %>%
+  pull(predictor)
+
+roc_1mb <- roc_1mb %>%
+  ungroup() %>%
+  mutate(predictor = factor(predictor, levels = order))
+
+# create labels to add auroc to plots
+auroc_labels <- auroc_1mb %>%
+  left_join(select(auroc_stats_1mb, predictor, avg_auroc), by = "predictor") %>%
+  mutate(predictor = factor(predictor, levels = order)) %>%
+  mutate(label = paste0("AUC: ", round(auc, digits = 2))) %>%
+  mutate(x = 0.8, y = if_else(sample == "chr11", true = 0.25, false = 0.1))
+
+# plot roc curves for every predictor
+ggplot(roc_1mb, aes(x = FPR, y = TPR, color = sample)) +
+  facet_wrap(~predictor, ncol = 2) +
+  geom_line(size = 1) +
+  geom_abline(lty = "dashed", color = "darkgray") +
+  geom_text(data = auroc_labels, aes(x, y, label = label), show.legend = FALSE) +
+  labs(color = "Region") +
+  scale_color_manual(values = c("chr11" = "indianred3", "chr8" = "steelblue")) +
+  theme_bw() +
+  theme(legend.position = "top",
+        legend.text = element_text(size = 12),
+        legend.title = element_text(size = 13))
+```
+
+***
+
+# Source
+* <a download="abc_analysis_screen.Rmd" href="`r base64enc::dataURI(file = params$rmd,
+    mime = 'text/rmd', encoding = 'base64')`">R Markdown source file (to produce this document)</a>

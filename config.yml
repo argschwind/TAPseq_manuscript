@@ -210,4 +210,11 @@ chromatin_analyses:
     H3K4me3:  "https://www.encodeproject.org/files/ENCFF712XRE/@@download/ENCFF712XRE.bigWig"
     H3K27me3: "https://www.encodeproject.org/files/ENCFF928NWQ/@@download/ENCFF928NWQ.bigWig"
     POLR2A:   "https://www.encodeproject.org/files/ENCFF321FZQ/@@download/ENCFF321FZQ.bigWig"
+  encode_bam:
+    H3K27ac:   "https://www.encodeproject.org/files/ENCFF301TVL/@@download/ENCFF301TVL.bam"
+    H3K4me1:   "https://www.encodeproject.org/files/ENCFF290LQY/@@download/ENCFF290LQY.bam"
+    H3K4me3:   "https://www.encodeproject.org/files/ENCFF611YPB/@@download/ENCFF611YPB.bam"
+    H3K27me3:  "https://www.encodeproject.org/files/ENCFF915XIL/@@download/ENCFF915XIL.bam"
+    POLR2A:    "https://www.encodeproject.org/files/ENCFF438GBD/@@download/ENCFF438GBD.bam"
+    Dnase-seq: "https://www.encodeproject.org/files/ENCFF538GKX/@@download/ENCFF538GKX.bam"
   rao_hic: "ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE63nnn/GSE63525/suppl/GSE63525_K562_intrachromosomal_contact_matrices.tar.gz"
