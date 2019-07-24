@@ -2,98 +2,110 @@
 
 # sample id: /path/to/fastq/directory
 samples:
-  Sample10X:  /g/steinmetz/incoming/solexa/2018-11-22-H3372BGX9/lane1/LIB38089_RBA37572/fastq
-  11iv210ng:  /g/steinmetz/incoming/solexa/2018-11-22-H3372BGX9/lane1/LIB38090_RBA37573/fastq
-  11iv22ng:   /g/steinmetz/incoming/solexa/2018-11-22-H3372BGX9/lane1/LIB38091_RBA37574/fastq
-  8iv210ng:   /g/steinmetz/incoming/solexa/2018-11-22-H3372BGX9/lane1/LIB38087_RBA37570/fastq
-  8iv22ng:    /g/steinmetz/incoming/solexa/2018-11-22-H3372BGX9/lane1/LIB38088_RBA37571/fastq
-  8iScreen1:  /g/steinmetz/project/singcellTxn/CRISPRdrop/10X_RAW_DATA/k562_screen_Feb2019/8iScreen1
-  11iScreen1: /g/steinmetz/project/singcellTxn/CRISPRdrop/10X_RAW_DATA/k562_screen_Feb2019/11iScreen1
-  WholeTx:    /g/steinmetz/project/singcellTxn/CRISPRdrop/10X_RAW_DATA/cropseq_vs_tapseq_may2019/WholeTx
-  TAP:        /g/steinmetz/project/singcellTxn/CRISPRdrop/10X_RAW_DATA/cropseq_vs_tapseq_may2019/TAP
-  TAP1:       /g/steinmetz/incoming/solexa/2019-04-17-H5HTFBDXX/lane1/LIB43383_RBA42866/fastq
-  TAP2:       /g/steinmetz/incoming/solexa/2019-04-17-H5HTFBDXX/lane1/LIB43382_RBA42865/fastq
+  Sample10X:   /g/steinmetz/incoming/solexa/2018-11-22-H3372BGX9/lane1/LIB38089_RBA37572/fastq
+  11iv210ng:   /g/steinmetz/incoming/solexa/2018-11-22-H3372BGX9/lane1/LIB38090_RBA37573/fastq
+  11iv22ng:    /g/steinmetz/incoming/solexa/2018-11-22-H3372BGX9/lane1/LIB38091_RBA37574/fastq
+  8iv210ng:    /g/steinmetz/incoming/solexa/2018-11-22-H3372BGX9/lane1/LIB38087_RBA37570/fastq
+  8iv22ng:     /g/steinmetz/incoming/solexa/2018-11-22-H3372BGX9/lane1/LIB38088_RBA37571/fastq
+  8iScreen1:   /g/steinmetz/project/singcellTxn/CRISPRdrop/10X_RAW_DATA/k562_screen_Feb2019/8iScreen1
+  11iScreen1:  /g/steinmetz/project/singcellTxn/CRISPRdrop/10X_RAW_DATA/k562_screen_Feb2019/11iScreen1
+  WholeTx:     /g/steinmetz/project/singcellTxn/CRISPRdrop/10X_RAW_DATA/cropseq_vs_tapseq_may2019/WholeTx
+  TAP1:        /g/steinmetz/incoming/solexa/2019-04-17-H5HTFBDXX/lane1/LIB43383_RBA42866/fastq
+  TAP2:        /g/steinmetz/incoming/solexa/2019-04-17-H5HTFBDXX/lane1/LIB43382_RBA42865/fastq
+  re-wholetx:  /g/steinmetz/incoming/solexa/2019-06-28-HJNGJBGXB/lane1/LIB45917_RBA45400/fastq
+  re11iv210ng: /g/steinmetz/incoming/solexa/2019-06-28-HJNGJBGXB/lane1/LIB45918_RBA45401/fastq
+  DanielUnclear: /g/steinmetz/schraivo
 
 # rough A PRIORI estimate of the number of sequenced cells per sample. this is only used for plots
 # in the alignment report and does not impact generated output data
 expect_cell_numbers:
-  Sample10X:  10000
-  11iv210ng:  8000
-  11iv22ng:   8000
-  8iv210ng:   8000
-  8iv22ng:    8000
-  8iScreen1:  100000
-  11iScreen1: 100000
-  WholeTx:    32000
-  TAP:        16000
-  TAP1:       8000
-  TAP2:       8000
+  Sample10X:   10000
+  11iv210ng:   8000
+  11iv22ng:    8000
+  8iv210ng:    8000
+  8iv22ng:     8000
+  8iScreen1:   100000
+  11iScreen1:  100000
+  WholeTx:     32000
+  TAP1:        8000
+  TAP2:        8000
+  re-wholetx:  8000
+  re11iv210ng: 8000
+  DanielUnclear: 18000
 
 # number of cells for which dge data should be extracted. these can be arrays to extract dge for
 # multiple sets of cells per sample
 dge_ncells:
-  Sample10X:  8000
-  11iv210ng:  8500
-  11iv22ng:   8500
-  8iv210ng:   7500
-  8iv22ng:    7500
-  8iScreen1:  112000
-  11iScreen1: 120000
-  WholeTx:    38000
-  TAP:        22000
-  TAP1:       11000
-  TAP2:       11000
+  Sample10X:   8000
+  11iv210ng:   8500
+  11iv22ng:    8500
+  8iv210ng:    7500
+  8iv22ng:     7500
+  8iScreen1:   112000
+  11iScreen1:  120000
+  WholeTx:     38000
+  TAP1:        11000
+  TAP2:        11000
+  re-wholetx:  8000
+  re11iv210ng: 8500
+  DanielUnclear: 19000
   
 # cell and umi barcode base positions in barcode reads for each sample. the first element of the
 # array is the cell barcode range, while the second is the UMI barcode range. for screen samples the
 # i7 sample barcode was added to the cell barcode, to avoid barcode collisions because multiple 10X
 # lanes were multiplexed.
 bc_structure:
-  Sample10X:  [1-16, 17-26]
-  11iv210ng:  [1-16, 17-26]
-  11iv22ng:   [1-16, 17-26]
-  8iv210ng:   [1-16, 17-26]
-  8iv22ng:    [1-16, 17-26]
-  8iScreen1:  [1-24, 25-34]
-  11iScreen1: [1-24, 25-34]
-  WholeTx:    [1-24, 25-34]
-  TAP:        [1-24, 25-34]
-  TAP1:       [1-16, 17-26]
-  TAP2:       [1-16, 17-26]
+  Sample10X:   [1-16, 17-26]
+  11iv210ng:   [1-16, 17-26]
+  11iv22ng:    [1-16, 17-26]
+  8iv210ng:    [1-16, 17-26]
+  8iv22ng:     [1-16, 17-26]
+  8iScreen1:   [1-24, 25-34]
+  11iScreen1:  [1-24, 25-34]
+  WholeTx:     [1-24, 25-34]
+  TAP1:        [1-16, 17-26]
+  TAP2:        [1-16, 17-26]
+  re-wholetx:  [1-16, 17-26]
+  re11iv210ng: [1-16, 17-26]
+  DanielUnclear: [1-16, 17-26]
 
 # alignment reference for each sample
 align_ref:
-  Sample10X:  data/genome_reference
-  11iv210ng:  data/tapseq_ref_validation
-  11iv22ng:   data/tapseq_ref_validation
-  8iv210ng:   data/tapseq_ref_validation
-  8iv22ng:    data/tapseq_ref_validation
-  8iScreen1:  data/tapseq_ref_chr8_screen
-  11iScreen1: data/tapseq_ref_chr11_screen
-  WholeTx:    data/genome_reference_v2
-  TAP:        data/tapseq_ref_validation_v2
-  TAP1:       data/tapseq_ref_validation_v2
-  TAP2:       data/tapseq_ref_validation_v2
+  Sample10X:   data/genome_reference
+  11iv210ng:   data/tapseq_ref_validation
+  11iv22ng:    data/tapseq_ref_validation
+  8iv210ng:    data/tapseq_ref_validation
+  8iv22ng:     data/tapseq_ref_validation
+  8iScreen1:   data/tapseq_ref_chr8_screen
+  11iScreen1:  data/tapseq_ref_chr11_screen
+  WholeTx:     data/genome_reference_v2
+  TAP1:        data/tapseq_ref_validation_v2
+  TAP2:        data/tapseq_ref_validation_v2
+  re-wholetx:  data/genome_reference
+  re11iv210ng: data/tapseq_ref_validation
+  DanielUnclear: data/tapseq_ref_validation_v3
   
 # number of minimum molecules per CROP-seq vector to define a cell perturbed for a given vector
 perturbation_status:
   min_txs:
-    Sample10X:  4
-    11iv210ng:  8
-    11iv22ng:   8
-    8iv210ng:   8
-    8iv22ng:    8
-    8iScreen1:  8
-    11iScreen1: 8
-    WholeTx:    8
-    TAP:        8
-    TAP1:       8
-    TAP2:       8
+    Sample10X:   4
+    11iv210ng:   8
+    11iv22ng:    8
+    8iv210ng:    8
+    8iv22ng:     8
+    8iScreen1:   8
+    11iScreen1:  8
+    WholeTx:     8
+    TAP1:        8
+    TAP2:        8
+    re-wholetx:  8
+    re11iv210ng: 8
+    DanielUnclear: 8
 
 # sample ids for validation and screen TAP-seq runs
 validation:   [11iv210ng, 11iv22ng, 8iv210ng, 8iv22ng, Sample10X]
 screen:       [8iScreen1, 11iScreen1]
-tap_vs_whole: [WholeTx, TAP, TAP1, TAP2]
+tap_vs_whole: [WholeTx, TAP1, TAP2]
 
 ## PARAMETERS FOR INDIVIDUAL RULES =================================================================
 
@@ -108,6 +120,7 @@ create_tapseq_ref:
     tapseq_ref_chr8_screen:   meta_data/target_genes_chr8_screen.gtf
     tapseq_ref_chr11_screen:  meta_data/target_genes_chr11_screen.gtf
     tapseq_ref_validation_v2: meta_data/target_genes_validation_v2.gtf
+    tapseq_ref_validation_v3: meta_data/target_genes_validation.gtf
   BSgenome_id: BSgenome.Hsapiens.UCSC.hg38
   
 create_vector_ref:
@@ -118,6 +131,7 @@ create_vector_ref:
     tapseq_ref_chr8_screen:   meta_data/cropseq_vectors_chr8_screen.fasta
     tapseq_ref_chr11_screen:  meta_data/cropseq_vectors_chr11_screen.fasta
     tapseq_ref_validation_v2: meta_data/cropseq_vectors_validation_v2.fasta
+    tapseq_ref_validation_v3: meta_data/cropseq_vectors_chr8_screen.fasta
   vector_prefix:
     "CROPseq_dCas9_DS_"
   
@@ -171,6 +185,9 @@ downsample:
   reads_per_cell:
     Sample10X: [1000, 1500, 3500, 5000, 10000, 15000, 20000]
     tap-seq:   [1000, 1500, 3500]
+    re-wholetx:  [1000, 1500, 3500, 5000, 10000]
+    re11iv210ng: [1000, 1500, 3500, 5000, 10000, 15000, 20000, 30000]
+    DanielUnclear: [1000, 1500, 3500, 5000, 7000]
  
 collapse_perturbations:
   targets:

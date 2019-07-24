@@ -86,6 +86,16 @@ rule tapseq_vs_cropseq:
   script:
     "../scripts/tapseq_vs_cropseq.Rmd"
   
+# downsample dge data for figure 1 plots
+rule downsample_dge_fig1:
+  input:
+    dge = [expand("data/re-wholetx/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+             rpc = config["downsample"]["reads_per_cell"]["re-wholetx"]),
+           expand("data/re11iv210ng/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+             rpc = config["downsample"]["reads_per_cell"]["re11iv210ng"]),
+           expand("data/DanielUnclear/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+             rpc = config["downsample"]["reads_per_cell"]["DanielUnclear"])]
+  
 # analysis of downsampled dge to same sequencing depth per sample for power comparison between
 # TAP-seq and CROP-seq
 rule downsampled_dge:
