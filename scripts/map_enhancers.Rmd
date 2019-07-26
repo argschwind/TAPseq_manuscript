@@ -40,7 +40,7 @@ ncell_files <- here(snakemake@input$ncells)
 # set name for each file
 samples <- basename(dirname(dirname(ncell_files)))
 names(ncell_files) <- basename(ncell_files) %>%
-  sub("ncells_", "", .) %>%
+  sub("ncells_MAST_", "", .) %>%
   sub("_.*", "", .) %>%
   paste(samples, ., sep = "_")
 
@@ -50,7 +50,7 @@ de_output_files <- here(snakemake@input$de_output)
 # set name for each file
 samples <- basename(dirname(dirname(de_output_files)))
 names(de_output_files) <- basename(de_output_files) %>%
-  sub("output_", "", .) %>%
+  sub("output_MAST_", "", .) %>%
   sub("_.*", "", .) %>%
   paste(samples, ., sep = "_")
 
@@ -284,14 +284,14 @@ ggsave(here("results/plots", "perts_per_cell.pdf"), device = "pdf", width = 7,  
 ## Number of cis-enhancers per gene
 Cis enhancer gene pairs are extracted by selecting pairs within the same regions and at least 1kb
 away from the target genes TSS. Furthermore, any significant hits that lead to an increase in
-expression of their target genes are filtered out, as they probably do not act through enhancer
-activation repression. The number of cis-enhancers per gene are counted and plotted.
+expression of their target genes are filtered out, as they probably act through alternative
+mechanisms. The number of cis-enhancers per gene are counted and plotted.
 
 ```{r enhPerGene, fig.width=5, fig.height=5}
 # extract cis enhancer - gene pairs and remove significant pairs that increase gene expression
 cis_enh_perts <- results %>%
   filter(enh_type == "cis", abs(dist_to_tss) >= 1000) %>%
-  filter(!(significant == "sig" & logFC > 0))
+  filter(!(significant == "sig" & manual_lfc > 0))
 
 # count the number of enhancers for each gene
 enh_per_gene <- cis_enh_perts %>%

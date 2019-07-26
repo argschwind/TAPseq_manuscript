@@ -83,7 +83,7 @@ if (covars == "nGenesCovar") {
 
 # perform differential gene expression analysis
 output <- test_differential_expression(sce, min_cells = snakemake@params$min_cells,
-                                       method = "MAST", parallel = parallel)
+                                       method = snakemake@wildcards$method, parallel = parallel)
 
 # save output
 write.csv(output, file = snakemake@output$results, row.names = FALSE)

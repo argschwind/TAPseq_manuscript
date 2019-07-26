@@ -60,7 +60,7 @@ is computed for the enhancer of every tested enhancer - target gene pair.
 # "chr" to chromosome for use with ENCODE data
 cis_enh_perts <- results %>%
   filter(enh_type == "cis", abs(dist_to_tss) >= 1000) %>%
-  filter(!(significant == "sig" & logFC > 0)) %>%
+  filter(!(significant == "sig" & manual_lfc > 0)) %>%
     mutate(enh_chr = paste0("chr", enh_chr),
          gene_chr = paste0("chr", gene_chr))
 

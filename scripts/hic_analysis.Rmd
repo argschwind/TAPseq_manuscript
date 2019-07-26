@@ -46,8 +46,11 @@ cis_enh_perts <- results %>%
   mutate(enh_chr = paste0("chr", enh_chr), gene_chr = paste0("chr", gene_chr),
          significant = if_else(pval_adj_allTests < 0.05, true = "sig", false = "non_sig"))
 
-# remove validation controls on other chromosomes than the samples' target region
-cis_enh_perts <- filter(cis_enh_perts, sample == enh_chr)
+# remove validation controls on other chromosomes than the samples' target region and significant
+# hits that increase gene expression
+cis_enh_perts <- cis_enh_perts %>%
+  filter(sample == enh_chr) %>%
+  filter(!(significant == "sig" & manual_lfc > 0))
 
 # download chain file for hg38 to hg19 liftover
 chain_url <- "http://hgdownload.cse.ucsc.edu/goldenPath/hg38/liftOver/hg38ToHg19.over.chain.gz"

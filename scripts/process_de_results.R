@@ -1,6 +1,6 @@
 ## process differential expression results. calculate FDR across all experiments (samples), compute
-# confidence score based on significant single gRNA hits and infer distance to TSS for all cis
-# enhancer - gene pairs
+# confidence score based on significant single gRNA hits, add manually computed log fold change and
+# infer distance to TSS for all cis enhancer - gene pairs
 
 library(here)
 library(rtracklayer)
@@ -14,17 +14,27 @@ result_files <- here(snakemake@input$results)
 # set name for each file
 samples <- basename(dirname(dirname(result_files)))
 names(result_files) <- basename(result_files) %>%
-  sub("output_", "", .) %>%
+  sub("output_MAST_", "", .) %>%
   sub("_.*", "", .) %>%
   paste(samples, ., sep = "_")
 
-# read files
-results <- lapply(result_files, FUN = read.csv, stringsAsFactors = FALSE)
-
-# convert to one data.frame
-results <- results %>%
+# read files and convert into one data.frame
+results <- result_files %>%
+  lapply(FUN = read.csv, stringsAsFactors = FALSE) %>%
   bind_rows(.id = "id") %>%
   separate(id, into = c("sample", "strategy"), sep = "_")
+
+# files containing manually calculated log fold change
+lfc_files <- here(snakemake@input$lfc)
+names(lfc_files) <- basename(dirname(dirname(lfc_files)))
+
+# load lfc files and convert into one data.frame
+lfc <- lfc_files %>%
+  lapply(FUN = read.csv, stringsAsFactors = FALSE) %>%
+  bind_rows(.id = "sample")
+
+# replace infinite values (pert or control is 0) by NA
+lfc <- mutate(lfc, lfc = replace(lfc, is.infinite(lfc), NA))
 
 # load target gene annotations
 annot <- lapply(here(snakemake@input$annot), FUN = import, format = "gtf")
@@ -72,6 +82,12 @@ gRNA_hits <- results %>%
 # add single gRNA hits to enhancer hits
 enh_perts <- left_join(enh_perts, gRNA_hits, by = c("sample", "perturbation", "gene"))
 
+# log fold change ----------------------------------------------------------------------------------
+
+# add manually calculate log fold change to de results
+enh_perts <- lfc %>%
+  select(sample, perturbation, gene, manual_lfc = lfc) %>%
+  left_join(enh_perts, ., by = c("sample", "perturbation", "gene"))
 
 # add enhancer and gene TSS coordinates ------------------------------------------------------------
 

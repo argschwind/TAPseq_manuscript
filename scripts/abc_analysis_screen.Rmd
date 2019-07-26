@@ -42,8 +42,11 @@ cis_enh_perts <- results %>%
   mutate(enh_chr = paste0("chr", enh_chr), gene_chr = paste0("chr", gene_chr),
          significant = if_else(pval_adj_allTests < 0.05, true = "sig", false = "non_sig"))
 
-# remove validation controls on other chromosomes than the samples' target region
-cis_enh_perts <- filter(cis_enh_perts, sample == enh_chr)
+# remove validation controls on other chromosomes than the samples' target region and significant
+# hits that increase gene expression
+cis_enh_perts <- cis_enh_perts %>%
+  filter(sample == enh_chr) %>%
+  filter(!(significant == "sig" & manual_lfc > 0))
 ```
 
 # Annotate chromatin
@@ -422,7 +425,7 @@ pairs <- pairs %>%
 sig_pairs <- pairs %>%
   group_by(sample, gene) %>%
   filter(sum(significant) > 0) %>%
-  select(-c(2, 5:13, 22:28, 31))
+  select(-c(2, 5:14, 23:29, 32))
 
 # convert to long format and set pretty predictor names
 sig_pairs_long <- sig_pairs %>%
@@ -482,7 +485,7 @@ sig_pairs_1mb <- pairs %>%
   group_by(sample, gene) %>%
   filter(dist_to_tss <= 1e6) %>%
   filter(sum(significant) > 0) %>%
-  select(-c(2, 5:13, 22:28, 31))
+  select(-c(2, 5:14, 23:29, 32))
 
 # compute number of enhancers per gene
 enh_per_gene <- summarize(sig_pairs_1mb, enhancers = n())
@@ -520,7 +523,6 @@ ggplot(auroc_1mb, aes(x = predictor, y = auc)) +
   theme_bw() +
   theme(axis.title.x = element_blank())
 ```
-
 
 ```{r avgAuroc1Mb, fig.height=5, fig.width=7}
 # calculate mean and median auroc

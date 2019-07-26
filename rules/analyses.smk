@@ -32,7 +32,7 @@ def perturb_status_file(wildcards):
   elif strategy == "perEnh":
     pert_file = "data/" + sample + "/perturb_status_collapsed.txt"
   else:
-    raise ValueError("strategy mus be 'perGRNA' or 'perEnh'!")
+    raise ValueError("strategy must be 'perGRNA' or 'perEnh'!")
   return(pert_file)
 
 # validation experiments ---------------------------------------------------------------------------
@@ -156,38 +156,37 @@ rule collapse_perturbations:
     "python scripts/collapse_perturbations.py -i {input.pert_status} -t {input.grna_targets} "
     "-o {output} 2> {log}"
   
-# map enhancer-gene pairs using MAST for differential gene expression testing. strategy can be
-# either "perEnh" or "perGRNA", specifying whether DE tests should be performed using perturbations
-# collapsed per enhancer or per gRNA. covars specifies the cell-level covariates that should be used
-# for differential expression tests. Can be one of: 'noCovar', 'nGenesCovar', or 'XpcCovar', where
-# X is the number of principal components (e.g. 2 = PCs 1+2).
+# Perform differential gene expression testing to discover enhancer - gene interactions. Method can
+# be one of "MAST", "DEsingle" or "LFC", while strategy can be either "perEnh" or "perGRNA",
+# specifying whether DE tests should be performed using perturbations collapsed per enhancer or per
+# gRNA. covars specifies the cell-level covariates that should be used for differential expression
+# tests. Can be one of: 'noCovar', 'nGenesCovar', or 'XpcCovar', where X is the number of principal
+# components (e.g. 2 = PCs 1+2).
 rule diff_expr:
   input:
     dge = "data/{sample}/dge.txt",
     perturb_status = perturb_status_file
   output:
-    results = "data/{sample}/diff_expr/output_{strategy}_{covars}.csv",
-    ncells =  "data/{sample}/diff_expr/ncells_{strategy}_{covars}.csv"
+    results = "data/{sample}/diff_expr/output_{method}_{strategy}_{covars}.csv",
+    ncells =  "data/{sample}/diff_expr/ncells_{method}_{strategy}_{covars}.csv"
   params:
     vector_pattern = config["create_vector_ref"]["vector_prefix"],
     exclude_lanes = lambda wildcards: config["map_enhancers"]["remove_lanes"][wildcards.sample],
     min_cells = lambda wildcards: config["map_enhancers"]["min_cells"][wildcards.strategy],
     seed = 20190324
-  log: "data/{sample}/logs/diff_expr_{strategy}_{covars}.log"
+  log: "data/{sample}/logs/diff_expr_{method}_{strategy}_{covars}.log"
   threads: config["map_enhancers"]["threads"]
   conda: "../envs/r_map_enhancers.yml"
   script:
     "../scripts/differential_expression.R"
-  
-# compare different covariates for differential expression tests
+
+# compare models with different covariates for differential expression testing using MAST
 rule compare_covariates:
   input:
-    results = expand("data/{sample}/diff_expr/output_{strategy}_{covars}.csv",
+    results = expand("data/{sample}/diff_expr/output_MAST_{strategy}_{covars}.csv",
       sample = config["screen"], strategy = ["perEnh", "perGRNA"],
       covars = ["noCovar", "1pcCovar", "2pcCovar", "nGenesCovar"]),
     dge = expand("data/{sample}/dge.txt", sample = config["screen"]),
-    perturb_status = expand("data/{sample}/perturb_status_collapsed.txt",
-      sample = config["screen"]),
     annot = ["meta_data/target_genes_chr8_screen.gtf", "meta_data/target_genes_chr11_screen.gtf"]
   output:
     "results/compare_covariates.html"
@@ -196,13 +195,15 @@ rule compare_covariates:
   conda: "../envs/r_map_enhancers.yml"
   script:
     "../scripts/compare_covariates.Rmd"
-  
-# process de results and calculate useful stats such as confidence levels and distance to TSS.
+    
+# process MAST de results and calculate useful stats such as confidence levels and distance to TSS.
 # generates input files for detailed enhancer analyses
 rule process_de_results:
   input:
-    results = expand("data/{sample}/diff_expr/output_{strategy}_{{covars}}.csv",
+    results = expand("data/{sample}/diff_expr/output_MAST_{strategy}_{{covars}}.csv",
       sample = config["screen"], strategy = ["perEnh", "perGRNA"]),
+    lfc = expand("data/{sample}/diff_expr/output_LFC_perEnh_noCovar.csv",
+      sample = config["screen"]),
     annot = ["meta_data/target_genes_chr8_screen.gtf", "meta_data/target_genes_chr11_screen.gtf"],
     enh_coords = ["meta_data/enhancers_chr8_screen.bed", "meta_data/enhancers_chr11_screen.bed"]
   output:
@@ -213,12 +214,13 @@ rule process_de_results:
   script:
     "../scripts/process_de_results.R"
   
-# perform basic analyses of differential expression results and enhancer - target gene pairs.
+# perform basic analyses of MAST differential expression results to identify cis enhancer - target
+# gene interactions
 rule map_enhancers:
   input:
-    de_output = expand("data/{sample}/diff_expr/output_{strategy}_nGenesCovar.csv",
+    de_output = expand("data/{sample}/diff_expr/output_MAST_{strategy}_nGenesCovar.csv",
       sample = config["screen"], strategy = ["perEnh", "perGRNA"]),
-    ncells = expand("data/{sample}/diff_expr/ncells_{strategy}_nGenesCovar.csv",
+    ncells = expand("data/{sample}/diff_expr/ncells_MAST_{strategy}_nGenesCovar.csv",
       sample = config["screen"], strategy = ["perEnh", "perGRNA"]),
     processed_results = "data/diff_expr_screen_nGenesCovar.csv",
     perturb_status = expand("data/{sample}/perturb_status_collapsed.txt",

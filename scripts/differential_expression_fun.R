@@ -197,19 +197,25 @@ de_MAST <- function(pert_object) {
 #' LFC DE function
 #' 
 #' Simple calculation of log-fold changes in gene expression between perturbed and control cells.
+#' Counts are normalized using censored mean normalization excluding top 10% expressed genes and
+#' are log transformed. This is identical to the normalization applied when using MAST for
+#' differential expression testing.
 #' 
 #' @param pert_object SingleCellExperiment object containing gene expression data (counts) and cell
 #'   groupings in colData. The perturbation to be tested is assumed to be the first column in
 #'   colData!
 #' @param pseudocount Pseudocount to be added to transcript counts when calculating average gene
 #'   expression.
-de_LFC <- function(pert_object, pseudocount = 1) {
+de_LFC <- function(pert_object, pseudocount = 0) {
   
   # get raw counts and groups for each cell
   counts <- assay(pert_object, "counts")
-  groups <- colData(pert_object)[,1]
+  groups <- colData(pert_object)[, 1]
   
-  # calculate average expression for each gene (with pseudocount)
+  # normalize data using censored mean normalization with log1p as scale function
+  counts <- normalize_cens_mean(counts, percentile = 0.9, norm_counts = FALSE, scale_fun = log1p)
+  
+  # calculate average expression for each gene in both groups
   pert_avg <- rowMeans(counts[, groups == 1] + pseudocount)
   ctrl_avg <- rowMeans(counts[, groups == 0] + pseudocount)
   
@@ -221,7 +227,6 @@ de_LFC <- function(pert_object, pseudocount = 1) {
   data.frame(gene = rownames(avg_genex), avg_genex, stringsAsFactors = FALSE, row.names = NULL)
   
 }
-
 
 # helper functions ---------------------------------------------------------------------------------
 

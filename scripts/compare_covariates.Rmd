@@ -48,7 +48,7 @@ de_files <- here(snakemake@input$results)
 # extract relevant information from filenames
 de_files_info <- de_files %>%
   sub(".*data/", "", .) %>%
-  sub("/diff_expr/output_", "_", .) %>%
+  sub("/diff_expr/output_MAST_", "_", .) %>%
   sub("Covar.csv", "", .) %>%
   sub("_no", "_none", .)
 
@@ -358,7 +358,7 @@ p3
 ***
 
 # DE tests with covariates
-Differential expression analysis was performed with different sets ofcovariates:
+Differential expression analysis was performed with different sets of covariates:
 
 * No covariates
 * 1st PC
