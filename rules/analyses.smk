@@ -19,9 +19,20 @@ def get_cbc_whitelist(wildcards):
     whitelist = "meta_data/10x_cell_barcode_whitelists/wholeTx_10x_bc_whitelist_737k_201608.txt.gz"
   elif sample == "TAP":
     whitelist = "meta_data/10x_cell_barcode_whitelists/TAP_10x_bc_whitelist_737k_201608.txt.gz"
+  elif sample in config["drop-seq"]:
+    whitelist = []  # no cell barcode whitelist available for drop-seq samples
   else:
     whitelist = "meta_data/10x_cell_barcode_whitelists/10x_bc_whitelist_737k_201608.txt"
   return whitelist
+  
+# create whitelist argument for extract_dge.py. required because whitelist can be an empty list
+# (see above), which needs to be translated to an empty ('') string argument
+def get_whitelist_arg(whitelist):
+  if isinstance(whitelist, str):
+    whitelist_arg = "-w " + whitelist + " "
+  else:
+    whitelist_arg = ""
+  return whitelist_arg
 
 # get correct perturbation status input file for DE strategies
 def perturb_status_file(wildcards):
@@ -49,11 +60,12 @@ rule downsample:
   params:
     reads = lambda wildcards: config["dge_ncells"][wildcards.sample] * int(wildcards.rpc),
     tpt_threshold = config["extract_dge"]["tpt_threshold"],
+    whitelist_arg = lambda wildcards, input: get_whitelist_arg(input.whitelist),
     seed = 20190607
   log: "data/{sample}/logs/downsample_{rpc}_avg_reads_per_cell.log"
   conda: "../envs/dropseq_tools.yml"
   shell:
-    "python scripts/extract_dge.py -i {input.umi_obs} -o {output.dge} -w {input.whitelist} "
+    "python scripts/extract_dge.py -i {input.umi_obs} -o {output.dge} {params.whitelist_arg}"
     "--sample {params.reads} --seed {params.seed} --tpt_threshold {params.tpt_threshold} 2> {log}"
   
 # calculate reads on target genes enrichment
@@ -94,7 +106,11 @@ rule downsample_dge_fig1:
            expand("data/re11iv210ng/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
              rpc = config["downsample"]["reads_per_cell"]["re11iv210ng"]),
            expand("data/DanielUnclear/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
-             rpc = config["downsample"]["reads_per_cell"]["DanielUnclear"])]
+             rpc = config["downsample"]["reads_per_cell"]["DanielUnclear"]),
+           expand("data/W4ea/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+             rpc = config["downsample"]["reads_per_cell"]["W4ea"]),
+           expand("data/T4ea/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+             rpc = config["downsample"]["reads_per_cell"]["T4ea"])]
   
 # analysis of downsampled dge to same sequencing depth per sample for power comparison between
 # TAP-seq and CROP-seq

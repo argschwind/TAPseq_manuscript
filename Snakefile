@@ -52,7 +52,13 @@ rule alignment_reference:
     "data/tapseq_ref_validation_v2/genomeDir",
     "data/tapseq_ref_validation_v3/cropseq_ref.dict",
     "data/tapseq_ref_validation_v3/cropseq_ref.refFlat",
-    "data/tapseq_ref_validation_v3/genomeDir"
+    "data/tapseq_ref_validation_v3/genomeDir",
+    "data/genome_reference_dropseq/cropseq_ref.dict",
+    "data/genome_reference_dropseq/cropseq_ref.refFlat",
+    "data/genome_reference_dropseq/genomeDir",
+    "data/tapseq_ref_dropseq/cropseq_ref.dict",
+    "data/tapseq_ref_dropseq/cropseq_ref.refFlat",
+    "data/tapseq_ref_dropseq/genomeDir"
 
 # run workflow until read alignment. this allows to determine the number of cells before extracting
 # dge data and finishing the workflow

@@ -13,9 +13,20 @@ def get_cbc_whitelist(wildcards):
     whitelist = "meta_data/10x_cell_barcode_whitelists/wholeTx_10x_bc_whitelist_737k_201608.txt.gz"
   elif sample == "TAP":
     whitelist = "meta_data/10x_cell_barcode_whitelists/TAP_10x_bc_whitelist_737k_201608.txt.gz"
+  elif sample in config["drop-seq"]:
+    whitelist = []  # no cell barcode whitelist available for drop-seq samples
   else:
     whitelist = "meta_data/10x_cell_barcode_whitelists/10x_bc_whitelist_737k_201608.txt"
   return whitelist
+
+# create whitelist argument for extract_dge.py. required because whitelist can be an empty list
+# (see above), which needs to be translated to an empty ('') string argument
+def get_whitelist_arg(whitelist):
+  if isinstance(whitelist, str):
+    whitelist_arg = "-w " + whitelist + " "
+  else:
+    whitelist_arg = ""
+  return whitelist_arg
 
 # workflow rules -----------------------------------------------------------------------------------
 
@@ -58,11 +69,12 @@ rule extract_dge:
   log:
     "data/{sample}/logs/extract_dge.log"
   params:
-    tpt_threshold = config["extract_dge"]["tpt_threshold"]
+    tpt_threshold = config["extract_dge"]["tpt_threshold"],
+    whitelist_arg = lambda wildcards, input: get_whitelist_arg(input.whitelist)
   conda:
     "../envs/dropseq_tools.yml"
   shell:
-    "python scripts/extract_dge.py -i {input.umi_obs} -o {output.dge} -w {input.whitelist} "
+    "python scripts/extract_dge.py -i {input.umi_obs} -o {output.dge} {params.whitelist_arg}"
     "--tpt_threshold {params.tpt_threshold} 2> {log}"
     
 # infer perturbation status of each cell
