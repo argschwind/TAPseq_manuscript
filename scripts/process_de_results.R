@@ -39,11 +39,19 @@ lfc <- mutate(lfc, lfc = replace(lfc, is.infinite(lfc), NA))
 # load target gene annotations
 annot <- lapply(here(snakemake@input$annot), FUN = import, format = "gtf")
 
-# merge into one GRangesList object, separated by genes 
-genes <- annot %>%
+# merge into one GRanges object
+annot <- annot %>%
   do.call("c", .) %>%
-  unique() %>%
-  split(f = .$gene_name)
+  unique()
+
+# filter for exons of protein-coding genes (no processed transcripts etc)
+annot <- annot[annot$type == "exon" &
+                 annot$gene_biotype == "protein_coding" &
+                 annot$transcript_biotype == "protein_coding"
+               ]
+
+# split by gene name into a GRangesList
+genes <- split(annot, f = annot$gene_name)
 
 # load enhancer coordinates files
 enh_coords <- here(snakemake@input$enh_coords) %>%

@@ -421,11 +421,12 @@ From the previous plots, it becomes evident, that high-confidence enhancers are 
 of the target TSS. This is investigated further by plotting the number of individual gRNA hits vs.
 distance to TSS.
 ```{r dTssVsConf}
-# only select significant enhancer - gene pairs that have a associated confidence score
-enh_gene_pairs <- filter(cis_enh_perts, significant == "sig", !is.na(prop_grna_hits))
+# only select significant enhancer - gene pairs
+enh_gene_pairs <- filter(cis_enh_perts, significant == "sig")
 
 # plot the distance to TSS vs number of gRNA hits
-ggplot(enh_gene_pairs, aes(x = as.factor(grna_hits), y = abs(dist_to_tss) / 1000, color = sample)) +
+ggplot(drop_na(enh_gene_pairs),
+       aes(x = as.factor(grna_hits), y = abs(dist_to_tss) / 1000,color = sample)) +
   geom_hline(yintercept = 1000, lty = "dashed", color = "gray42") +
   geom_jitter(width = 0.2) +
   geom_boxplot(color = "black", width = 0.2, fill = NA, outlier.shape = NA) +
@@ -434,7 +435,7 @@ ggplot(enh_gene_pairs, aes(x = as.factor(grna_hits), y = abs(dist_to_tss) / 1000
   scale_color_manual(values = c("Chr11" = "indianred3", "Chr8" = "steelblue")) +
   scale_y_log10() +
   theme_bw() +
-  theme(text = element_text(size = 20))
+  theme(text = element_text(size = 20), panel.grid = element_blank())
 
 # save plot for manuscript
 ggsave(here("results/plots", "confidence_vs_dist.pdf"), device = "pdf", width = 7, height = 5)
@@ -473,19 +474,20 @@ ggsave(here("results/plots", "dist_sig_vs_nonsig.pdf"), device = "pdf", width = 
 ```
 
 ## Enhancers and gene landscape
-The number of TSS of other genes between the enhancer and its target gene are computed for all
+The number of TSSs of other genes between the enhancer and its target gene are computed for all
 associations.
 
 ### Jumped genes
 For each enhancer - target gene association the number of jumped genes is calculated and plotted.
 
-```{r}
+```{r geneAnnotations}
 # import gencode hg38 annotations
 annot_url <- "ftp://ftp.ensembl.org/pub/release-89/gtf/homo_sapiens/Homo_sapiens.GRCh38.89.chr.gtf.gz"
 annot <- import(annot_url, format = "gtf")
 
-# extract annotations for protein-coding genes
-genes <- annot[annot$gene_biotype == "protein_coding"]
+# extract exon annotations for protein-coding genes
+genes <- annot[annot$type == "exon" & annot$gene_biotype == "protein_coding" &
+                 annot$transcript_biotype == "protein_coding"]
 
 # only retain annotations on assessed chromosomes (maybe a little faster to overlap)
 enh_chrs <- unique(cis_enh_perts$enh_chr)
@@ -493,92 +495,104 @@ genes <- genes[seqnames(genes) %in% enh_chrs]
 genes <- split(genes, f = genes$gene_name)
 ```
 
-```{r}
+```{r jumpedGenes}
 # calculate enhancer centers
-enh_centers <- round((enh_gene_pairs$enh_start + enh_gene_pairs$enh_end) / 2)
+enh_gene_pairs <- enh_gene_pairs %>%
+  mutate(enh_center = round((enh_start + enh_end) / 2))
 
-# get gene TSS and enh center for every association
-coords <- data.frame(tss = enh_gene_pairs$gene_tss, enh = enh_centers)
-rownames(coords) <- paste(enh_gene_pairs$sample, enh_gene_pairs$perturbation,
-                          enh_gene_pairs$gene, sep = "_")
-
-# sort every association, so that the upstream coordinate is first
-coords <- as.list(as.data.frame(t(coords)))  # convert to list of vectors (by row)
-coords <- lapply(coords, FUN = sort)
-coords <- do.call(rbind, coords)
-
-# process into nice data.frame
-coords_df <- coords %>%
-  as.data.frame() %>%
-  rownames_to_column(var = "id") %>%
-  separate(id, into = c("sample", "perturbation", "gene"), sep = "_") %>%
-  rename(start = V1, end = V2)
+# create (sorted) interval between enhancer center and target gene tss
+coords <- enh_gene_pairs %>%
+  select(sample, perturbation, gene, gene_tss, enh_center) %>%
+  gather(key = "type", value = "coord", -c(sample, perturbation, gene)) %>%
+  group_by(sample, perturbation, gene) %>%
+  summarize(start = sort(coord)[1],
+            end = sort(coord)[2])
 
 # merge with additional data
-coords_df <- enh_gene_pairs %>%
-  select(sample, perturbation, gene, enh_chr, dist_to_tss, neg_log10_pvalue,
+coords <- enh_gene_pairs %>%
+  select(sample, perturbation, gene, chr = enh_chr, dist_to_tss, neg_log10_pvalue,
          prop_grna_hits, grna_hits) %>%
-  right_join(coords_df, by = c("sample", "perturbation", "gene")) %>%
-  rename(chr = enh_chr)
+  right_join(coords, by = c("sample", "perturbation", "gene"))
   
 # create GRanges object and overlap with protein-coding gene annotations
-overlaps <- coords_df %>%
+overlaps <- coords %>%
   makeGRangesFromDataFrame(keep.extra.columns = TRUE) %>%
   findOverlaps(query = ., subject = genes)
 
 # convert to list per hit
-overlaps_list <- as.data.frame(overlaps) %>%
-  split(., f = .$queryHits)
+overlaps_list <- split(overlaps, f = from(overlaps))
 
 # get unique overlapping gene names (genes that are jumoed by the enhancer)
 jumped_genes <- lapply(overlaps_list, FUN = function(x) {
-  target_gene <- coords_df[unique(x$queryHits), "gene"]
-  all_genes <- unique(names(genes[x$subjectHits]))
+  target_gene <- unique(coords[from(x), "gene"])
+  all_genes <- names(genes[to(x)])
   all_genes[all_genes != target_gene]
 })
 
 # count number of jumped genes per association and add that number to data.frame
-n_jumped <- unlist(lapply(jumped_genes, FUN = length))
-coords_df$jumped_genes <- n_jumped
+n_jumped <- sapply(jumped_genes, FUN = length)
+coords$jumped_genes <- n_jumped
+
+# compute histogram
+jumped_hist <- coords %>%
+  count(jumped_genes) %>%
+  mutate(perc = n / sum(n))
 
 # plot the number of jumped genes
-ggplot(coords_df, aes(jumped_genes)) +
-  geom_histogram(bins = 15) +
+total_value = sum(jumped_hist$n)
+ggplot(jumped_hist, aes(x = jumped_genes, y = n)) +
+  geom_bar(stat = "identity") +
   labs(x = "Genes jumped") +
+  scale_y_continuous(sec.axis = sec_axis(~(./total_value), labels = scales::percent,
+                                         name = "Percentage"), name = "Counts") +
   theme_bw() +
-  theme(text = element_text(size = 15))
+  theme(text = element_text(size = 15), panel.grid = element_blank())
 
 # save plot for manuscript
 ggsave(here("results/plots", "jumped_genes.pdf"), device = "pdf", width = 7, height = 5)
 
 # plot association strength vs jumped genes
-ggplot(coords_df, aes(x = jumped_genes, y = neg_log10_pvalue, color = prop_grna_hits)) +
+ggplot(coords, aes(x = jumped_genes, y = neg_log10_pvalue, color = prop_grna_hits)) +
   geom_point() +
   scale_color_gradient(low = "blue", high = "orangered") +
   labs(x = "Genes jumped", y = expression(-log[10] ~ p - value),
        title = "Association strength vs jumped genes", color = "Confidence\n(prop. gRNA hits)") +
   theme_bw() +
-  theme(text = element_text(size = 15))
+  theme(text = element_text(size = 15), panel.grid = element_blank())
 
 # save plot for manuscript
 ggsave(here("results/plots", "pvalue_vs_jumped_genes.pdf"), device = "pdf", width = 7, height = 5)
 ```
 
 ### Nearest gene
-Every significant pair is assessed whether the target is the closest gene to the enhancer.
+Every significant pair is assessed whether the target TSS is the nearest TSS to the enhancer.
 
-```{r, fig.width = 3, fig.height=5}
-# get coordinates of enhancers
+```{r nearestTSS, fig.width=5, fig.height=3}
+# create GRanges object with enhancer center coordinates for every detected association
 enh_coords <- enh_gene_pairs %>%
-  select(sample, perturbation, gene, enh_chr, enh_start, enh_end, dist_to_tss, neg_log10_pvalue,
+  select(sample, perturbation, gene, enh_chr, enh_center, dist_to_tss, neg_log10_pvalue,
          grna_hits, prop_grna_hits) %>%
-  makeGRangesFromDataFrame(seqnames.field = "enh_chr", start.field = "enh_start",
-                           end.field = "enh_end", keep.extra.columns = TRUE)
+  makeGRangesFromDataFrame(seqnames.field = "enh_chr", start.field = "enh_center",
+                           end.field = "enh_center", keep.extra.columns = TRUE)
 
-# find nearest gene to each enhancer
-gene_loci <- unlist(range(genes))
-nearest_idx <- nearest(x = enh_coords, subject = gene_loci)
-nearest_genes <- names(gene_loci[nearest_idx])
+# function to get a genes TSS
+get_tss <- function(x) {
+  if (all(strand(x) == "+")) {
+    tss = min(start(x))
+  }else if (all(strand(x) == "-")) {
+    tss = max(end(x))
+  }else{
+    stop("Inconsistent strand information!")
+  }
+  GRanges(seqnames = unique(seqnames(x)), ranges = IRanges(tss, tss), strand = unique(strand(x)))
+}
+
+# get TSS for all genes on chr8 and chr11
+gene_tss <- unlist(GRangesList(lapply(genes, FUN = get_tss)))
+
+# find nearest gene TSS to each enhancer
+nearest_idx <- nearest(x = enh_coords, subject = gene_tss, ignore.strand = TRUE)
+nearest_genes <- names(gene_tss[nearest_idx])
 
 # add to associations
 nearest_per_hit <- data.frame(mcols(enh_coords), nearest_gene = nearest_genes,
@@ -588,9 +602,34 @@ nearest_per_hit <- data.frame(mcols(enh_coords), nearest_gene = nearest_genes,
 nearest_per_hit <- nearest_per_hit %>%
   mutate(is_nearest = if_else(gene == nearest_gene, true = 1, false = 0))
 
-# percentage of enhancers where the target gene is the nearest gene
+# number and percentage of enhancers where the target gene is the nearest gene
+n_nearest <- sum(nearest_per_hit$is_nearest)
 perc_is_nearest <- mean(nearest_per_hit$is_nearest) * 100
 
+# labels for x-axis for plot(s)
+x_labels <- c(paste0("Nearest TSS (n = ", n_nearest,")"),
+              paste0("Other TSS (n = ", nrow(nearest_per_hit) - n_nearest, ")"))
+
+# title for plot
+plot_title = paste0("Nearest TSS (", round(perc_is_nearest, digits = 1), "% of cases)")
+
+# plot the number of pairs, where the target TSS is the closest TSS vs. not 
+ggplot(nearest_per_hit, aes(x = fct_relevel(factor(is_nearest), "1"), fill = sample)) +
+  geom_bar(position = "dodge") +
+  labs(title = plot_title, y = "ETPs", fill = "Region") +
+  scale_fill_manual(values = c("Chr11" = "indianred3", "Chr8" = "steelblue")) +
+  scale_x_discrete(labels = x_labels) +
+  theme_bw() +
+  theme(axis.title.x = element_blank(), text = element_text(size = 13),
+        panel.grid = element_blank())
+
+# save plot for manuscript
+ggsave(here("results/plots", "pvalue_vs_jumped_genes.pdf"), device = "pdf", width = 7, height = 5)
+```
+
+**Nearest TSS vs. p-value and confidence level**
+
+```{r nearestTssStats, fig.height=5, fig.width=3.5}
 # compare p-value and confidence level between hits where the target gene is the nearest gene and
 # hits where this is not the case
 nearest_per_hit %>%
@@ -599,7 +638,9 @@ nearest_per_hit %>%
   ggplot(., aes(x = factor(is_nearest), y = value)) +
   facet_wrap(~stat, ncol = 1, scales = "free") +
   geom_boxplot(fill = "steelblue3") +
-  theme_bw()
+  scale_x_discrete(labels = x_labels) +
+  theme_bw() +
+  theme(axis.title.x = element_blank(), panel.grid = element_blank())
 ```
 
 ***
