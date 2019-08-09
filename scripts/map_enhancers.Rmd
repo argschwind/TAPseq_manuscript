@@ -293,6 +293,10 @@ cis_enh_perts <- results %>%
   filter(enh_type == "cis", abs(dist_to_tss) >= 1000) %>%
   filter(!(significant == "sig" & manual_lfc > 0))
 
+# only retain hits within the same target region (discard out of region control enhancers)
+cis_enh_perts <- cis_enh_perts %>%
+  filter(enh_chr == sub("Chr", "", sample))
+
 # count the number of enhancers for each gene
 enh_per_gene <- cis_enh_perts %>%
   group_by(sample, gene) %>%
@@ -578,11 +582,12 @@ enh_coords <- enh_gene_pairs %>%
 # function to get a genes TSS
 get_tss <- function(x) {
   if (all(strand(x) == "+")) {
-    tss = min(start(x))
+    tss <- min(start(x))
   }else if (all(strand(x) == "-")) {
-    tss = max(end(x))
+    tss <- max(end(x))
   }else{
-    stop("Inconsistent strand information!")
+    warning("Inconsistent strand information for gene:", unique(x$gene_name), call. = FALSE)
+    return(GRanges())
   }
   GRanges(seqnames = unique(seqnames(x)), ranges = IRanges(tss, tss), strand = unique(strand(x)))
 }
@@ -624,7 +629,7 @@ ggplot(nearest_per_hit, aes(x = fct_relevel(factor(is_nearest), "1"), fill = sam
         panel.grid = element_blank())
 
 # save plot for manuscript
-ggsave(here("results/plots", "pvalue_vs_jumped_genes.pdf"), device = "pdf", width = 7, height = 5)
+ggsave(here("results/plots", "nearest_tss.pdf"), device = "pdf", width = 5, height = 3)
 ```
 
 **Nearest TSS vs. p-value and confidence level**

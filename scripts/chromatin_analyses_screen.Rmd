@@ -52,16 +52,20 @@ for every assessed enhancer. Significant enhancers are then compared to non-sign
 with a similar distance to TSS distribution to identify enrichment of chromatin marks at
 functionally verified enhancers.
 
-## Chromatin marsk at enhancers
+## Chromatin marks at enhancers
 The fold change over control signal of different enhancer and transcription relevant chromatin marks
 is computed for the enhancer of every tested enhancer - target gene pair.
 ```{r loadChIPdata}
-# extract cis enhancer - gene pairs, remove significant pairs that increase gene expression and add
-# "chr" to chromosome for use with ENCODE data
+# extract cis enhancer - gene pairs, remove significant pairs that increase gene expression
 cis_enh_perts <- results %>%
   filter(enh_type == "cis", abs(dist_to_tss) >= 1000) %>%
-  filter(!(significant == "sig" & manual_lfc > 0)) %>%
-    mutate(enh_chr = paste0("chr", enh_chr),
+  filter(!(significant == "sig" & manual_lfc > 0))
+
+# only retain hits within the same target region (discard out of region control enhancers) and add
+# "chr" to enhancer chromosome for use with ENCODE data
+cis_enh_perts <- cis_enh_perts %>%
+  filter(enh_chr == sub("Chr", "", sample)) %>%
+  mutate(enh_chr = paste0("chr", enh_chr),
          gene_chr = paste0("chr", gene_chr))
 
 # get enhancer coordinates and convert to GRanges object
@@ -157,14 +161,13 @@ bins <- seq(from = dtss_range[1], to = dtss_range[2], by = 1e4)
 cis_enh_perts <- cis_enh_perts %>%
   mutate(dTSS_bin = cut(dist_to_tss, bins))
 
-# extract significant enhancer - gene associations (no GATA1, because it's the only on chrX)
-sig_pairs <- cis_enh_perts %>%
-  filter(significant == "sig", perturbation != "GATA1")
+# extract significant enhancer - gene associations
+sig_pairs <- filter(cis_enh_perts, significant == "sig")
 
 # get other tested enhancer - gene pairs but whose enhancers appear only in non-sigificant tests
 nonSig_pairs <- cis_enh_perts %>%
   filter(significant == "non_sig", !perturbation %in% sig_pairs$perturbation,
-         perturbation != "GATA1")
+         perturbation != "GATA1")  # no GATA1, because it's the only on chrX
 
 # randomly draw 3 control pairs for each significant enhancer - gene association
 set.seed(20190617)
