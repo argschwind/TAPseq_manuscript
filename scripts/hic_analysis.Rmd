@@ -346,6 +346,8 @@ int_freqs <- expect_int %>%
   bind_rows(int_freq_pairs)
 ```
 
+**Hi-C interaction frequencies**
+
 ```{r plotIntFreqs, fig.width=8, fig.height=5}
 # add an amount equal to bin size to distance for plotting on log10 scale and reformat labels
 int_freqs_plot <- int_freqs %>%
@@ -357,7 +359,7 @@ int_freqs_plot <- int_freqs %>%
 # plot interaction frequencies between
 p1 <- ggplot(drop_na(int_freqs_plot), aes(x = conf, y = int_freq + 1, color = conf)) +
   facet_wrap(~sample, ncol = 1) +
-  geom_jitter(width = 0.2, size = 3) +
+  geom_jitter(width = 0.2, size = 2.5) +
   geom_boxplot(color = "black", outlier.shape = NA, fill = NA) +
   labs(y = "Hi-C Interaction frequency", color = "Confidence:") +
   scale_color_manual(values = c("High" = "goldenrod2",
@@ -375,8 +377,8 @@ p2 <- ggplot(int_freqs_plot, aes(x = dist, y = int_freq + 1)) +
   geom_point(data = filter(int_freqs_plot, type == "background"), pch = 4, size = 2,
              color = "black", alpha = 1) +
   geom_point(data = filter(int_freqs_plot, type == "non_sig"), aes(color = conf), alpha = 1,
-             size = 3) +
-  geom_point(data = filter(int_freqs_plot, type == "sig"), aes(color = conf), size = 3) +
+             size = 2.5) +
+  geom_point(data = filter(int_freqs_plot, type == "sig"), aes(color = conf), size = 2.5) +
   geom_smooth(data = filter(int_freqs_plot, type != "sig"), aes(linetype = type),
               color = "indianred3", se = FALSE, lwd = 2) +
   labs(x = "Distance (kb)", y = "Hi-C Interaction frequency", color = "Confidence",
@@ -397,6 +399,52 @@ ggsave(here("results/plots", "hic_interaction_frequencies.png"), device = "png",
        height = 5)
 ggsave(here("results/plots", "hic_interaction_frequencies.pdf"), device = "pdf", width = 8,
        height = 5)
+```
+
+**Hi-C interaction frequencies, combined regions**
+
+```{r plotIntFreqsCombined, fig.width=8, fig.height=5}
+# plot interaction frequencies across confidence levels and significant vs non-significant
+p1 <- ggplot(drop_na(int_freqs_plot), aes(x = conf, y = int_freq + 1, color = conf)) +
+  geom_jitter(width = 0.2, size = 2.5) +
+  geom_boxplot(color = "black", outlier.shape = NA, fill = NA) +
+  labs(y = "Hi-C Interaction frequency", color = "Confidence:") +
+  scale_color_manual(values = c("High" = "goldenrod2",
+                                "Low" = "darkslategray3", "NS" = "gray")) +
+  scale_y_log10(limits = c(NA, 1200), breaks = c(1, 10, 100, 1000)) +
+  theme_bw() +
+  theme(text = element_text(size = 23.5), panel.grid = element_blank(),
+        axis.title.x = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1))
+
+# plot interaction frequency as a function of distance
+x_breaks <- c(0, 10^(4:10))  # breaks to draw on x axis (without added bin distance!)
+p2 <- ggplot(int_freqs_plot, aes(x = dist, y = int_freq + 1)) +
+  geom_point(data = filter(int_freqs_plot, type == "background"), pch = 4, size = 2,
+             color = "black", alpha = 1) +
+  geom_point(data = filter(int_freqs_plot, type == "non_sig"), aes(color = conf), alpha = 1,
+             size = 2.5) +
+  geom_point(data = filter(int_freqs_plot, type == "sig"), aes(color = conf), size = 2.5) +
+  geom_smooth(data = filter(int_freqs_plot, type != "sig"), aes(linetype = type),
+              color = "indianred3", se = FALSE, lwd = 2) +
+  labs(x = "Distance (kb)", y = "Hi-C Interaction frequency", color = "Confidence",
+       linetype = "Type") +
+  scale_color_manual(values = c("High" = "goldenrod2",
+                                "Low" = "darkslategray3", "NS" = "gray")) +
+  scale_x_log10(breaks = x_breaks + 5000, labels = scales::comma(x_breaks / 1000)) +
+  scale_y_log10(limits = c(NA, 1200), breaks = c(1, 10, 100, 1000)) +
+  theme_bw() +
+  theme(text = element_text(size = 22), panel.grid = element_blank())
+
+# arrange plots with common legend (props ggpubr!)
+ggarrange(p1, p2 + theme(axis.title.y = element_blank()), ncol = 2, nrow = 1, common.legend = TRUE,
+          legend = "top", widths = c(1, 2))
+
+# save plot for manuscript
+ggsave(here("results/plots", "hic_interaction_frequencies_combined.png"), device = "png", width = 8,
+       height = 4)
+ggsave(here("results/plots", "hic_interaction_frequencies_combined.pdf"), device = "pdf", width = 8,
+       height = 4)
 ```
 
 # Sample similar distance to TSS
@@ -430,12 +478,12 @@ sample_ctrls <- function(pair, nonSig_pairs, n = 2) {
 set.seed(20190626)
 sampled_ctrls <- int_freq_sig %>%
   rowwise() %>%
-  do(sample_ctrls(pair = ., nonSig_pairs = int_freq_nonSig, n = 3))
+  do(sample_ctrls(pair = ., nonSig_pairs = int_freq_nonSig, n = 2))
 
 # randomly sample background controls
 sampled_bckgrnd <- int_freq_sig %>%
   rowwise() %>%
-  do(sample_ctrls(pair = ., nonSig_pairs = int_freq_background, n = 3))
+  do(sample_ctrls(pair = ., nonSig_pairs = int_freq_background, n = 2))
   
 # combine significant pairs and sampled controls
 all_int_pairs <- rbind(int_freq_sig, sampled_ctrls) %>%
