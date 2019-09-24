@@ -275,19 +275,17 @@ rule download_encode_bam:
 rule download_hic_data:
   output:
     expand("data/k562_chromatin_data/HiC/5kb_resolution_intrachromosomal/{chr}/MAPQG0/{chr}_{file}",
-      chr = ["chr8", "chr11"], file = ["5kb.RAWobserved", "5kb.KRnorm"])
+      chr = ["chr" + str(i)  for i in [*range(1,23), "X"]],
+      file = ["5kb.RAWobserved", "5kb.KRnorm"])
   params:
     url = config["chromatin_analyses"]["rao_hic"]
   conda: "../envs/dropseq_tools.yml"
   shell:
-    "wget -c {params.url} -O - | tar -xz "
-    "K562/5kb_resolution_intrachromosomal/chr8/MAPQG0/ "
-    "K562/5kb_resolution_intrachromosomal/chr11/MAPQG0/ ; "
-    "mv K562/5kb_resolution_intrachromosomal/chr8/MAPQG0/* "
-    "data/k562_chromatin_data/HiC/5kb_resolution_intrachromosomal/chr8/MAPQG0 ; "
-    "mv K562/5kb_resolution_intrachromosomal/chr11/MAPQG0/* "
-    "data/k562_chromatin_data/HiC/5kb_resolution_intrachromosomal/chr11/MAPQG0 ; "
-    "rm -r K562"
+    "rm -r data/k562_chromatin_data/HiC/5kb_resolution_intrachromosomal; "
+    "wget -c {params.url} -O - | tar -xz K562/5kb_resolution_intrachromosomal/chr*/MAPQG0/; "
+    "mv K562/5kb_resolution_intrachromosomal "
+    "data/k562_chromatin_data/HiC/5kb_resolution_intrachromosomal; "
+    "rmdir K562"
     
 # perform in depth chromatin analyses of enhancer mapping results
 rule chromatin_analyses:
