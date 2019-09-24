@@ -53,7 +53,8 @@ cis_enh_perts <- cis_enh_perts %>%
 Ever assessed enhancer is annotated for the number of chromatin assay ChIP-seq and DNAse-seq reads.
 The RPKM is calculated to normalize for both the sequencing depth and enhancer size. The geometric
 mean between H3K27ac and DNAse-seq is then calculatated for every site to compute an enhancer
-activity score proposed by .
+activity score proposed by
+[Fulco et al., 2019](https://www.biorxiv.org/content/10.1101/529990v1)
 ```{r annotateChrom}
 # extract hg38 enhancer coordinates
 enh_coords <- cis_enh_perts %>%
@@ -99,8 +100,8 @@ cis_enh_perts <- enh_chrom_norm %>%
 ```
 
 # Annotate Hi-C
-Hi-C contact matrices from Rao et al., 2014 are imported and the contact frequency for each
-enhancer - gene pair is calculated.
+Hi-C contact matrices from [Rao et al., 2014](https://www.cell.com/abstract/S0092-8674(14)01497-4)
+are imported and the contact frequency for each enhancer - gene pair is calculated.
 
 ## Liftover enhancer and gene TSS coordinates
 Hi-C contact matrices are in hg19 annotation, so enhancer and gene TSS coordinates need to be lifted
@@ -168,9 +169,9 @@ cis_enh_perts <- cis_enh_perts %>%
 ```
 
 ## Prepare Hi-C data
-Contact matrices for K562 cells from Rao et al. 2014 are imported (5kb resolution). The provided
-normalization vectors are used to normalize the observed contacts (read counts). Data from the two
-chromosonal regions on chromosome 8 and 11 is extracted for any further analyses.
+Contact matrices for K562 cells are imported (5kb resolution). The provided normalization vectors
+are used to normalize the observed contacts (read counts). Data from the two chromosonal regions on
+chromosome 8 and 11 is extracted for any further analyses.
 ```{r HiCimportFunction}
 # function to import HiC data from Rao et al for one chromosome and create a HTCexp object
 import_hic <- function(sparse_cm_file, chromosome, resolution, bins) {

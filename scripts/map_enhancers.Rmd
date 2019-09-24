@@ -481,8 +481,8 @@ ggsave(here("results/plots", "dist_sig_vs_nonsig.pdf"), device = "pdf", width = 
 The number of TSSs of other genes between the enhancer and its target gene are computed for all
 associations.
 
-### Jumped genes
-For each enhancer - target gene association the number of jumped genes is calculated and plotted.
+### Skipped genes
+For each enhancer - target gene association the number of skipped genes is calculated and plotted.
 
 ```{r geneAnnotations}
 # import gencode hg38 annotations
@@ -499,7 +499,7 @@ genes <- genes[seqnames(genes) %in% enh_chrs]
 genes <- split(genes, f = genes$gene_name)
 ```
 
-```{r jumpedGenes}
+```{r skippedGenes}
 # calculate enhancer centers
 enh_gene_pairs <- enh_gene_pairs %>%
   mutate(enh_center = round((enh_start + enh_end) / 2))
@@ -526,46 +526,46 @@ overlaps <- coords %>%
 # convert to list per hit
 overlaps_list <- split(overlaps, f = from(overlaps))
 
-# get unique overlapping gene names (genes that are jumoed by the enhancer)
-jumped_genes <- lapply(overlaps_list, FUN = function(x) {
+# get unique overlapping gene names (genes that are skipped by the enhancer)
+skipped_genes <- lapply(overlaps_list, FUN = function(x) {
   target_gene <- unique(coords[from(x), "gene"])
   all_genes <- names(genes[to(x)])
   all_genes[all_genes != target_gene]
 })
 
-# count number of jumped genes per association and add that number to data.frame
-n_jumped <- sapply(jumped_genes, FUN = length)
-coords$jumped_genes <- n_jumped
+# count number of skipped genes per association and add that number to data.frame
+n_skipped <- sapply(skipped_genes, FUN = length)
+coords$skipped_genes <- n_skipped
 
 # compute histogram
-jumped_hist <- coords %>%
-  count(jumped_genes) %>%
+skipped_hist <- coords %>%
+  count(skipped_genes) %>%
   mutate(perc = n / sum(n))
 
-# plot the number of jumped genes
-total_value = sum(jumped_hist$n)
-ggplot(jumped_hist, aes(x = jumped_genes, y = n)) +
+# plot the number of skipped genes
+total_value = sum(skipped_hist$n)
+ggplot(skipped_hist, aes(x = skipped_genes, y = n)) +
   geom_bar(stat = "identity") +
-  labs(x = "Genes jumped") +
+  labs(x = "Genes skipped") +
   scale_y_continuous(sec.axis = sec_axis(~(./total_value), labels = scales::percent,
                                          name = "Percentage"), name = "Counts") +
   theme_bw() +
   theme(text = element_text(size = 15), panel.grid = element_blank())
 
 # save plot for manuscript
-ggsave(here("results/plots", "jumped_genes.pdf"), device = "pdf", width = 7, height = 5)
+ggsave(here("results/plots", "skipped_genes.pdf"), device = "pdf", width = 7, height = 5)
 
-# plot association strength vs jumped genes
-ggplot(coords, aes(x = jumped_genes, y = neg_log10_pvalue, color = prop_grna_hits)) +
+# plot association strength vs skipped genes
+ggplot(coords, aes(x = skipped_genes, y = neg_log10_pvalue, color = prop_grna_hits)) +
   geom_point() +
   scale_color_gradient(low = "blue", high = "orangered") +
-  labs(x = "Genes jumped", y = expression(-log[10] ~ p - value),
-       title = "Association strength vs jumped genes", color = "Confidence\n(prop. gRNA hits)") +
+  labs(x = "Genes skipped", y = expression(-log[10] ~ p - value),
+       title = "Association strength vs skipped genes", color = "Confidence\n(prop. gRNA hits)") +
   theme_bw() +
   theme(text = element_text(size = 15), panel.grid = element_blank())
 
 # save plot for manuscript
-ggsave(here("results/plots", "pvalue_vs_jumped_genes.pdf"), device = "pdf", width = 7, height = 5)
+ggsave(here("results/plots", "pvalue_vs_skipped_genes.pdf"), device = "pdf", width = 7, height = 5)
 ```
 
 ### Nearest gene
