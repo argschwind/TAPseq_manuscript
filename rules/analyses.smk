@@ -112,20 +112,6 @@ rule downsample_dge_fig1:
            expand("data/T4ea/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
              rpc = config["downsample"]["reads_per_cell"]["T4ea"])]
   
-# analysis of downsampled dge to same sequencing depth per sample for power comparison between
-# TAP-seq and CROP-seq
-rule downsampled_dge:
-  input:
-    dge = expand("data/{sample}/downsampled/dge_3500_avg_reads_per_cell.txt",
-      sample = config["validation"]),
-    pert_status = expand("data/{sample}/perturb_status.txt", sample = config["validation"]),
-    target_genes = "meta_data/target_genes_validation.csv",
-  output:
-    "results/downsampled_dge.html"
-  conda: "../envs/r_analyses.yml"
-  script:
-    "../scripts/downsampled_dge.Rmd"
-  
 # screen experiments -------------------------------------------------------------------------------
 
 # QC of screen data (dge data and detected perturbations)
