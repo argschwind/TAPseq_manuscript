@@ -126,19 +126,6 @@ rule downsampled_dge:
   script:
     "../scripts/downsampled_dge.Rmd"
   
-# downsample TAP-seq and CROP-seq dge to a fixed number of reads on target genes per cell
-rule downsampled_target_reads:
-  input:
-    umi_obs = expand("data/{sample}/umi_observations.txt", sample = config["validation"]),
-    pert_status = expand("data/{sample}/perturb_status.txt", sample = config["validation"]),
-    target_genes = "meta_data/target_genes_validation.csv",
-    whitelist = "meta_data/10x_cell_barcode_whitelists/10x_bc_whitelist_737k_201608.txt"
-  output:
-    "results/downsampled_target_reads.html"
-  conda: "../envs/r_analyses.yml"
-  script:
-    "../scripts/downsampled_target_reads.Rmd"
-  
 # screen experiments -------------------------------------------------------------------------------
 
 # QC of screen data (dge data and detected perturbations)

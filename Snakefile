@@ -19,7 +19,6 @@ rule all:
     dge = expand("results/dge/{sample}_dge_report.html", sample = config["samples"]),
     analyses = ["results/tapseq_vs_cropseq.html",
                 "results/downsampled_dge.html",
-                "results/downsampled_target_reads.html",
                 "results/screen_data_qc.html",
                 "results/compare_covariates.html",
                 "results/map_enhancers.html",
