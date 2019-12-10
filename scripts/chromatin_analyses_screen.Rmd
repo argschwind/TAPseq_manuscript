@@ -258,7 +258,7 @@ all_pairs_conf %>%
   ggplot(., aes(x = conf, y = fc_over_ctrl + 1, fill = conf)) +
   facet_wrap(~assay, ncol = 4) +
   geom_boxplot(notch = TRUE) +
-  stat_pvalue_manual(data = filter(kw_tests, assay != "H3K27me3"), y.position = 175, size = 5.5,
+  stat_pvalue_manual(data = filter(kw_tests, assay != "H3K27me3"), y.position = 130, size = 5.5,
                      label = "P adj. {p.adj.plot}", remove.bracket = TRUE, inherit.aes = FALSE) +
   labs(y = "FC over control") +
   scale_x_discrete(labels = c("High conf.", "Low conf.", "Non sig.")) +
@@ -284,7 +284,7 @@ all_pairs_conf %>%
   ggplot(., aes(x = conf, y = fc_over_ctrl + 1, fill = conf)) +
   facet_wrap(~assay) +
   geom_boxplot(notch = TRUE) +
-  stat_pvalue_manual(data = filter(kw_tests, assay == "H3K27me3"), y.position = 10, size = 5.5,
+  stat_pvalue_manual(data = filter(kw_tests, assay == "H3K27me3"), y.position = 8.7, size = 5.5,
                      label = "P adj. {p.adj.plot}", remove.bracket = TRUE, inherit.aes = FALSE) +
   labs(y = "FC over control") +
   scale_x_discrete(labels = c("High conf.", "Low conf.", "Non sig.")) +

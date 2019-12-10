@@ -11,7 +11,7 @@ dependencies:
   - r-corrplot=0.84
   - r-eulerr=5.1.0
   - r-factoextra=1.0.5
-  - r-ggpubr=0.2
+  - r-ggpubr=0.2.3
   - r-ggrepel=0.8.0
   - r-gridExtra=2.3
   - r-here=0.1
