@@ -1,8 +1,8 @@
 ---
-title: "CROP-seq DGE report"
+title: "Single-cell DGE report"
 date: "`r format(Sys.time(), '%B %d, %Y')`"
 params:
-  rmd: "dge_report.Rmd"
+  rmd: "dge_report_no_perts.Rmd"
 output:
   html_document:
     number_sections: yes
@@ -70,11 +70,12 @@ dge_stats <- arrange(dge_stats, desc(transcripts)) %>%
   mutate(cell_barcode = forcats::fct_inorder(cell_barcode))
 
 # calculate number of cell barcodes lost because of cell barcode whitelist filtering (for text only)
-ncells <- snakemake@config$dge_ncells[[snakemake@wildcards$sample]]
+ncells <- snakemake@config$cell_numbers[[snakemake@wildcards$sample]]
 filt_cells <- ncells - nrow(dge_stats)
 ```
-Expression data for `r ncells` cells were extracted and after filtering for cell barcodes on
-whitelist and chimeric reads filtering, a total of **`r filt_cells` cells** remain in the DGE data.
+Expression data were extracted for `r ncells` cells. After filtering for cell barcodes on
+whitelist and chimeric reads, a total of **`r nrow(dge_stats)` cells** remain in the DGE data.
+`r filt_cells` cells were filtered out.
 
 ## Summary stats
 These plots show the number of genic reads, transcripts (UMIs) and genes detected per cell.
@@ -188,93 +189,6 @@ if (nrow(dge_stats) <= 20000) {
     scale_y_log10() +
     theme_bw()
   
-}
-```
-
-***
-
-# Transfected vectors
-
-## Number of vector transcripts per cell
-The number of vector transcripts per cell is plotted.
-
-<br>
-
-```{r}
-# load dge data
-dge <- read.table(here(snakemake@input$dge), header = TRUE, stringsAsFactors = FALSE)
-
-# extract vector transcripts
-vctr_dge <- dge %>%
-  filter(grepl(GENE, pattern = snakemake@params$vector_prefix)) %>%
-  gather(key = "cell", value = "txs", -GENE)
-  
-# count number of total vector molecules per cell
-vctr_txs_per_cell <- vctr_dge %>%
-  group_by(cell) %>%
-  summarize(vctr_txs = sum(txs))
-
-# plot number of transcripts per cell distribution
-ggplot(vctr_txs_per_cell, aes(vctr_txs)) +
-  geom_histogram(bins = 25) +
-  labs(x = "Vector transcripts", y = "Cells", title = "Vector transcripts per cell") +
-  theme_bw()
-```
-
-## Perturbations per cell
-The distribution of the number of detected perturbations per cell is plotted. A minimum number of
-`r snakemake@config$perturbation_status$min_txs[snakemake@wildcards$sample]` transcripts per vector
-were required to call perturbations.
-
-<br>
-
-```{r}
-# load perturbation matrix
-perturb <- read.table(here(snakemake@input$perturb_stats), header = TRUE, stringsAsFactors = FALSE)
-
-# convert to long format
-perturb <- perturb %>%
-  gather(key = "cell", value = "pert", -VECTOR)
-
-# compute the number of perturbations per cell
-pert_per_cell <- perturb %>%
-  group_by(cell) %>%
-  summarize(pert_per_cell = sum(pert)) %>%
-  count(pert_per_cell)
-
-# plot number of perturbations per cell
-ggplot(pert_per_cell, aes(x = pert_per_cell, y = n)) +
-  geom_bar(stat = "identity") +
-  geom_text(aes(label = n), vjust = 0) +
-  labs(x = "Perturbations", y = "Cells", title = "Perturbations per cell") +
-  theme_bw()
-```
-
-## Cells per perturbation
-The number of cell per detected perturbation (vector) is plotted to see if some vectors are depleted
-from the sample.
-
-<br>
-
-```{r}
-# calculate number of cells per perturbation
-cells_per_pert <- perturb %>%
-  group_by(VECTOR) %>%
-  summarize(cells = sum(pert))
-
-# plot number of cell per perturbation
-p <- ggplot(cells_per_pert,
-            aes(x = forcats::fct_reorder(VECTOR, .x = cells, .desc = TRUE), y = cells)) +
-  geom_bar(stat = "identity") +
-  theme_bw() +
-  labs(x = "Perturbation", y = "Cells", title = "Number of cells per perturbation") +
-  theme_bw()
-
-# print plot with layout appropriate for number of perturbations
-if (nrow(cells_per_pert) <= 30) {
-  p + coord_flip()
-}else{
-  p + theme(axis.text.x=element_blank(), axis.ticks.x=element_blank(), panel.grid = element_blank())
 }
 ```
 

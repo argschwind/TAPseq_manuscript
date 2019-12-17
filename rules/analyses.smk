@@ -58,14 +58,14 @@ rule downsample:
     dge_stats = "data/{sample}/downsampled/dge_{rpc}_avg_reads_per_cell_summary.txt",
     tpt_hist = "data/{sample}/downsampled/dge_{rpc}_avg_reads_per_cell_tpt_histogram.txt"
   params:
-    reads = lambda wildcards: config["dge_ncells"][wildcards.sample] * int(wildcards.rpc),
+    reads = lambda wildcards: config["cell_numbers"][wildcards.sample] * int(wildcards.rpc),
     tpt_threshold = config["extract_dge"]["tpt_threshold"],
     whitelist_arg = lambda wildcards, input: get_whitelist_arg(input.whitelist),
     seed = 20190607
   log: "data/{sample}/logs/downsample_{rpc}_avg_reads_per_cell.log"
   conda: "../envs/dropseq_tools.yml"
   shell:
-    "python scripts/extract_dge.py -i {input.umi_obs} -o {output.dge} {params.whitelist_arg}"
+    "python scripts/processing/extract_dge.py -i {input.umi_obs} -o {output.dge} {params.whitelist_arg}"
     "--sample {params.reads} --seed {params.seed} --tpt_threshold {params.tpt_threshold} 2> {log}"
   
 # calculate reads on target genes enrichment
@@ -73,7 +73,7 @@ rule reads_on_target:
   input:
     bam = ["data/" + sample + "/gene_tagged_aligned.bam" for sample in config["validation"]],
     fastq = [fastq_read2(sample) for sample in config["validation"]],
-    target_genes = "meta_data/target_genes_validation.csv"
+    target_genes = "meta_data/target_gene_panels/target_genes_validation.csv"
   output:
     "data/reads_on_target.csv"
   params:
@@ -86,7 +86,7 @@ rule reads_on_target:
 rule tapseq_vs_cropseq:
   input:
     reads_on_target = "data/reads_on_target.csv",
-    target_genes = "meta_data/target_genes_validation.csv",
+    target_genes = "meta_data/target_gene_panels/target_genes_validation.csv",
     dge = [expand("data/{sample}/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
              sample = "Sample10X", rpc = config["downsample"]["reads_per_cell"]["Sample10X"]),
            expand("data/{sample}/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
@@ -121,7 +121,7 @@ rule screen_data_qc:
     perturb_status = expand("data/{sample}/perturb_status.txt", sample = config["screen"]),
     dge_stats = expand("data/{sample}/dge_summary.txt", sample = config["screen"]),
     valid_dge = expand("data/{sample}/downsampled_dge.txt", sample = config["validation"]),
-    target_genes = "meta_data/target_genes_validation.csv",
+    target_genes = "meta_data/target_gene_panels/target_genes_validation.csv",
     exp_data = "meta_data/screen_experimental_info.csv",
     vctr_seqs = expand("meta_data/cropseq_vectors_{chr}_screen.fasta", chr = ["chr8", "chr11"])
   output:
@@ -176,7 +176,8 @@ rule compare_covariates:
       sample = config["screen"], strategy = ["perEnh", "perGRNA"],
       covars = ["noCovar", "1pcCovar", "2pcCovar", "nGenesCovar"]),
     dge = expand("data/{sample}/dge.txt", sample = config["screen"]),
-    annot = ["meta_data/target_genes_chr8_screen.gtf", "meta_data/target_genes_chr11_screen.gtf"]
+    annot = ["meta_data/target_gene_panels/target_genes_chr8_screen.gtf",
+      "meta_data/target_gene_panels/target_genes_chr11_screen.gtf"]
   output:
     "results/compare_covariates.html"
   params:
@@ -193,7 +194,8 @@ rule process_de_results:
       sample = config["screen"], strategy = ["perEnh", "perGRNA"]),
     lfc = expand("data/{sample}/diff_expr/output_LFC_perEnh_noCovar.csv",
       sample = config["screen"]),
-    annot = ["meta_data/target_genes_chr8_screen.gtf", "meta_data/target_genes_chr11_screen.gtf"],
+    annot = ["meta_data/target_gene_panels/target_genes_chr8_screen.gtf",
+      "meta_data/target_gene_panels/target_genes_chr11_screen.gtf"],
     enh_coords = ["meta_data/enhancers_chr8_screen.bed", "meta_data/enhancers_chr11_screen.bed"]
   output:
     "data/diff_expr_screen_{covars}.csv"

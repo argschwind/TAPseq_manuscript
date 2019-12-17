@@ -28,35 +28,15 @@ rule all:
 # functions to run workflow only partially ---------------------------------------------------------
 
 # create whole-genome and tap-seq alignment references
-rule alignment_reference:
+rule alignment_references:
   input:
-    "data/genome_reference/cropseq_ref.dict",
-    "data/genome_reference/cropseq_ref.refFlat",
-    "data/genome_reference/genomeDir",
-    "data/tapseq_ref_validation/cropseq_ref.dict",
-    "data/tapseq_ref_validation/cropseq_ref.refFlat",
-    "data/tapseq_ref_validation/genomeDir",
-    "data/tapseq_ref_chr8_screen/cropseq_ref.dict",
-    "data/tapseq_ref_chr8_screen/cropseq_ref.refFlat",
-    "data/tapseq_ref_chr8_screen/genomeDir",
-    "data/tapseq_ref_chr11_screen/cropseq_ref.dict",
-    "data/tapseq_ref_chr11_screen/cropseq_ref.refFlat",
-    "data/tapseq_ref_chr11_screen/genomeDir",
-    "data/genome_reference_v2/cropseq_ref.dict",
-    "data/genome_reference_v2/cropseq_ref.refFlat",
-    "data/genome_reference_v2/genomeDir",
-    "data/tapseq_ref_validation_v2/cropseq_ref.dict",
-    "data/tapseq_ref_validation_v2/cropseq_ref.refFlat",
-    "data/tapseq_ref_validation_v2/genomeDir",
-    "data/tapseq_ref_validation_v3/cropseq_ref.dict",
-    "data/tapseq_ref_validation_v3/cropseq_ref.refFlat",
-    "data/tapseq_ref_validation_v3/genomeDir",
-    "data/genome_reference_dropseq/cropseq_ref.dict",
-    "data/genome_reference_dropseq/cropseq_ref.refFlat",
-    "data/genome_reference_dropseq/genomeDir",
-    "data/tapseq_ref_dropseq/cropseq_ref.dict",
-    "data/tapseq_ref_dropseq/cropseq_ref.refFlat",
-    "data/tapseq_ref_dropseq/genomeDir"
+    expand("data/alignment_references/{align_ref}/{ref_file}",
+      align_ref = ["hg38_genome_ref", "hg38_tapseq_ref_validation", "hg38_tapseq_ref_chr8_screen",
+        "hg38_tapseq_ref_chr11_screen", "hg38_genome_ref_v2", "hg38_tapseq_ref_validation_v2",
+        "hg38_tapseq_ref_validation_v3", "hg38_genome_ref_dropseq", "hg38_tapseq_ref_dropseq",
+        "mm10_genome_ref", "hg38_genome_ref_rev", "hg38_tapseq_ref_rev", "mm10_tapseq_ref_mix",
+        "hg38_tapseq_ref_l1000"],
+      ref_file = ["cropseq_ref.dict", "cropseq_ref.refFlat", "genomeDir"])
 
 # run workflow until read alignment. this allows to determine the number of cells before extracting
 # dge data and finishing the workflow

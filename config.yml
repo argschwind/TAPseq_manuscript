@@ -18,28 +18,8 @@ samples:
   W4ea: /g/steinmetz/incoming/solexa/2017-11-07-HW3MVBGX3/lane1/LIB26096_RBA25548/fastq
   T4ea: /g/steinmetz/incoming/solexa/2017-11-07-HW3MVBGX3/lane1/LIB26093_RBA25545/fastq
 
-# rough A PRIORI estimate of the number of sequenced cells per sample. this is only used for plots
-# in the alignment report and does not impact generated output data
-expect_cell_numbers:
-  Sample10X:   10000
-  11iv210ng:   8000
-  11iv22ng:    8000
-  8iv210ng:    8000
-  8iv22ng:     8000
-  8iScreen1:   100000
-  11iScreen1:  100000
-  WholeTx:     32000
-  TAP1:        8000
-  TAP2:        8000
-  re-wholetx:  8000
-  re11iv210ng: 8000
-  DanielUnclear: 18000
-  W4ea: 5000
-  T4ea: 5000
-
-# number of cells for which dge data should be extracted. these can be arrays to extract dge for
-# multiple sets of cells per sample
-dge_ncells:
+# estimated number of cells per sample, for which dge data should be extracted.
+cell_numbers:
   Sample10X:   8000
   11iv210ng:   8500
   11iv22ng:    8500
@@ -79,21 +59,21 @@ bc_structure:
   
 # alignment reference for each sample
 align_ref:
-  Sample10X:   data/genome_reference
-  11iv210ng:   data/tapseq_ref_validation
-  11iv22ng:    data/tapseq_ref_validation
-  8iv210ng:    data/tapseq_ref_validation
-  8iv22ng:     data/tapseq_ref_validation
-  8iScreen1:   data/tapseq_ref_chr8_screen
-  11iScreen1:  data/tapseq_ref_chr11_screen
-  WholeTx:     data/genome_reference_v2
-  TAP1:        data/tapseq_ref_validation_v2
-  TAP2:        data/tapseq_ref_validation_v2
-  re-wholetx:  data/genome_reference
-  re11iv210ng: data/tapseq_ref_validation
-  DanielUnclear: data/tapseq_ref_validation_v3
-  W4ea:  data/genome_reference_dropseq
-  T4ea:  data/tapseq_ref_dropseq
+  Sample10X:   data/alignment_references/hg38_genome_ref
+  11iv210ng:   data/alignment_references/hg38_tapseq_ref_validation
+  11iv22ng:    data/alignment_references/hg38_tapseq_ref_validation
+  8iv210ng:    data/alignment_references/hg38_tapseq_ref_validation
+  8iv22ng:     data/alignment_references/hg38_tapseq_ref_validation
+  8iScreen1:   data/alignment_references/hg38_tapseq_ref_chr8_screen
+  11iScreen1:  data/alignment_references/hg38_tapseq_ref_chr11_screen
+  WholeTx:     data/alignment_references/hg38_genome_ref_v2
+  TAP1:        data/alignment_references/hg38_tapseq_ref_validation_v2
+  TAP2:        data/alignment_references/hg38_tapseq_ref_validation_v2
+  re-wholetx:  data/alignment_references/hg38_genome_ref
+  re11iv210ng: data/alignment_references/hg38_tapseq_ref_validation
+  DanielUnclear: data/alignment_references/hg38_tapseq_ref_validation_v3
+  W4ea:  data/alignment_references/hg38_genome_ref_dropseq
+  T4ea:  data/alignment_references/hg38_tapseq_ref_dropseq
   
 # number of minimum molecules per CROP-seq vector to define a cell perturbed for a given vector
 perturbation_status:
@@ -114,7 +94,7 @@ perturbation_status:
     W4ea: 2
     T4ea: 8
     
-# sample ids for validation and screen TAP-seq runs
+# sample ids for different experiments
 validation:   [11iv210ng, 11iv22ng, 8iv210ng, 8iv22ng, Sample10X]
 screen:       [8iScreen1, 11iScreen1]
 tap_vs_whole: [WholeTx, TAP1, TAP2]
@@ -124,30 +104,42 @@ drop-seq:     [W4ea, T4ea]
 
 # step 1: create alignment reference ---------------------------------------------------------------
 download_genome_annot:
-  fasta_url: ftp://ftp.ensembl.org/pub/release-89/fasta/homo_sapiens/dna/Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz
-  gtf_url: ftp://ftp.ensembl.org/pub/release-89/gtf/homo_sapiens/Homo_sapiens.GRCh38.89.gtf.gz
-  
+  hg38:
+    fasta_url: ftp://ftp.ensembl.org/pub/release-89/fasta/homo_sapiens/dna/Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz
+    gtf_url: ftp://ftp.ensembl.org/pub/release-89/gtf/homo_sapiens/Homo_sapiens.GRCh38.89.gtf.gz
+  mm10:
+    fasta_url: ftp://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M20/GRCm38.primary_assembly.genome.fa.gz
+    gtf_url: ftp://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M20/gencode.vM20.annotation.gtf.gz
+
 create_tapseq_ref:
   target_genes: 
-    tapseq_ref_validation:    meta_data/target_genes_validation.gtf
-    tapseq_ref_chr8_screen:   meta_data/target_genes_chr8_screen.gtf
-    tapseq_ref_chr11_screen:  meta_data/target_genes_chr11_screen.gtf
-    tapseq_ref_validation_v2: meta_data/target_genes_validation_v2.gtf
-    tapseq_ref_validation_v3: meta_data/target_genes_validation.gtf
-    tapseq_ref_dropseq: meta_data/target_genes_validation.gtf
-  BSgenome_id: BSgenome.Hsapiens.UCSC.hg38
+    hg38_tapseq_ref_validation:    meta_data/target_gene_panels/target_genes_validation.gtf
+    hg38_tapseq_ref_chr8_screen:   meta_data/target_gene_panels/target_genes_chr8_screen.gtf
+    hg38_tapseq_ref_chr11_screen:  meta_data/target_gene_panels/target_genes_chr11_screen.gtf
+    hg38_tapseq_ref_validation_v2: meta_data/target_gene_panels/target_genes_validation_v2.gtf
+    hg38_tapseq_ref_validation_v3: meta_data/target_gene_panels/target_genes_validation.gtf
+    hg38_tapseq_ref_dropseq: meta_data/target_gene_panels/target_genes_validation.gtf
+    hg38_tapseq_ref_rev: meta_data/target_gene_panels/target_genes_chr8_rev.gtf
+    mm10_tapseq_ref_mix: meta_data/target_gene_panels/target_genes_mouse_mix.gtf
+    hg38_tapseq_ref_l1000: meta_data/target_gene_panels/target_genes_L1000.gtf.gz
+  BSgenome_id: 
+    hg38: BSgenome.Hsapiens.UCSC.hg38
+    mm10: BSgenome.Mmusculus.UCSC.mm10
   
 create_vector_ref:
   vector_fasta:
-    genome_reference:    meta_data/cropseq_vectors_validation.fasta
-    genome_reference_v2: meta_data/cropseq_vectors_validation_v2.fasta
-    genome_reference_dropseq: meta_data/cropseq_vectors_dropseq.fasta
-    tapseq_ref_validation:    meta_data/cropseq_vectors_validation.fasta
-    tapseq_ref_chr8_screen:   meta_data/cropseq_vectors_chr8_screen.fasta
-    tapseq_ref_chr11_screen:  meta_data/cropseq_vectors_chr11_screen.fasta
-    tapseq_ref_validation_v2: meta_data/cropseq_vectors_validation_v2.fasta
-    tapseq_ref_validation_v3: meta_data/cropseq_vectors_chr8_screen.fasta
-    tapseq_ref_dropseq: meta_data/cropseq_vectors_dropseq.fasta
+    hg38_genome_ref:    meta_data/cropseq_vectors/cropseq_vectors_validation.fasta
+    hg38_genome_ref_v2: meta_data/cropseq_vectors/cropseq_vectors_validation_v2.fasta
+    hg38_genome_ref_dropseq: meta_data/cropseq_vectors/cropseq_vectors_dropseq.fasta
+    hg38_genome_ref_rev: meta_data/cropseq_vectors/cropseq_vectors_rev.fasta
+    hg38_tapseq_ref_validation:    meta_data/cropseq_vectors/cropseq_vectors_validation.fasta
+    hg38_tapseq_ref_chr8_screen:   meta_data/cropseq_vectors/cropseq_vectors_chr8_screen.fasta
+    hg38_tapseq_ref_chr11_screen:  meta_data/cropseq_vectors/cropseq_vectors_chr11_screen.fasta
+    hg38_tapseq_ref_validation_v2: meta_data/cropseq_vectors/cropseq_vectors_validation_v2.fasta
+    hg38_tapseq_ref_validation_v3: meta_data/cropseq_vectors/cropseq_vectors_chr8_screen.fasta
+    hg38_tapseq_ref_dropseq: meta_data/cropseq_vectors/cropseq_vectors_dropseq.fasta
+    hg38_tapseq_ref_rev: meta_data/cropseq_vectors/cropseq_vectors_rev.fasta
+    hg38_tapseq_ref_l1000: meta_data/cropseq_vectors/cropseq_vectors_rev.fasta
   vector_prefix:
     "CROPseq_dCas9_DS_"
   

@@ -2,9 +2,9 @@
 
 # script to create custom tap-seq annotation data for read alignment
 
-# parse command line arguments ---------------------------------------------------------------------
+# parse command line arguments =====================================================================
 
-library("optparse")
+library(optparse)
 
 # create arguments list
 option_list = list(
@@ -37,7 +37,7 @@ for (i in required_args) {
   check_required_args(i, opt = opt, opt_parser = opt_parser)
 }
 
-# define functions ---------------------------------------------------------------------------------
+# define functions =================================================================================
 
 # attach required packages
 library(rtracklayer)
@@ -45,8 +45,7 @@ library(BSgenome)
 library(GenomicRanges)
 library(GenomicFeatures)
 
-# function to create gene loci tap-seq alignment reference based on input file
-# paths
+# main function to create gene loci tap-seq alignment reference based on input file paths
 create_tapseq_ref <- function(txs_file, BSgenome_id, fasta_outfile, gtf_outfile) {
   
   message("\nLoading data...")
@@ -56,39 +55,40 @@ create_tapseq_ref <- function(txs_file, BSgenome_id, fasta_outfile, gtf_outfile)
   
   # get BSgenome object containing the genome sequence
   genome <- getBSgenome(BSgenome_id)
-  
-  # make sure that genome seqlevels are in Ensembl style
-  genome_seqlevels <- seqlevels(genome)
-  genome_seqlevels <- sub(genome_seqlevels, pattern = "chr", replacement = "")
-  genome_seqlevels[genome_seqlevels == "M"] <- "MT"
-  seqlevels(genome) <- genome_seqlevels
-  
-  message("Creating tap-seq alignment reference...")
+  seqlevelsStyle(genome) <- seqlevelsStyle(txs)[1]  # set seqlevels to same style as txs input
   
   # create tap-seq alignment references
+  message("Creating tap-seq alignment reference...")
   ref <- tapseq_alignment_ref(txs, genome = genome)
   
   # save alignment reference data
   writeXStringSet(ref$contig_seqs, filepath = fasta_outfile, format = "fasta")
   export_gtf(ref$annot, filepath = gtf_outfile)
-  
+
   message("Done!")
   
 }
 
+# helper functions to create tap-seq alignment reference data ======================================
+
 # create alignment reference data for gene loci
-tapseq_alignment_ref <- function(txs, genome) {
+tapseq_alignment_ref <- function(txs, genome, gene_id = "gene_name") {
   
   # convert txs to GRanges if it's a GRangesList
   if (is(txs, "GRangesList")) {
     txs <- unlist(txs)
   }
   
+  # abort if genome is not a BSgenome or DNAStringSet object
+  if (!any(is(genome, "BSgenome") | is(genome, "DNAStringSet"))) {
+    stop("genome must be of class BSgenome or DNAStringSet!", call. = FALSE)
+  }
+  
   # sort txs by coordinates
   txs <- sort(txs)
   
   # group transcripts by gene names
-  genes <- split(txs, f = txs$gene_name)
+  genes <- split(txs, f = mcols(txs)[, gene_id])
   
   # create contigs for each locus ------------------------------------------------------------------
   
@@ -114,17 +114,15 @@ tapseq_alignment_ref <- function(txs, genome) {
   names(annot) <- NULL
   
   # get contig names based on names of genes overlapping each contig
-  names(contigs) <- sapply(overlaps, FUN = create_contig_names, genes = genes)
+  names(contigs) <- vapply(overlaps, FUN = contig_names, genes = genes, FUN.VALUE = character(1))
   
   # get sequences for contigs
-  contig_seqs <- get_contig_seqs(contigs = contigs, genome = genome)
+  contig_seqs <- extractTranscriptSeqs(genome, transcripts = contigs)
   
   # create and return output
   list(contig_seqs = contig_seqs, annot = annot)
   
 }
-
-# helper functions to create tap-seq alignment reference data --------------------------------------
 
 # create annotations for one contig
 create_contig_annot <- function(overlap, contigs, genes) {
@@ -143,8 +141,7 @@ create_contig_annot <- function(overlap, contigs, genes) {
   contig_name <- paste(gene_names, collapse = "_")
   
   # create new ouptut with contig name as seqnames
-  annot <- GRanges(seqnames = contig_name, ranges = ranges(ol_genes),
-                   strand = strand(ol_genes))
+  annot <- GRanges(seqnames = contig_name, ranges = ranges(ol_genes), strand = strand(ol_genes))
   
   # add metadata and return output
   mcols(annot) <- mcols(ol_genes)
@@ -153,7 +150,7 @@ create_contig_annot <- function(overlap, contigs, genes) {
 }
 
 # create contig names by exracting the names of all overlapping genes per contig
-create_contig_names <- function(overlap, genes) {
+contig_names <- function(overlap, genes) {
   
   # get gene names of overlapping genes
   gene_names <- names(genes[overlap$subjectHits])
@@ -163,22 +160,7 @@ create_contig_names <- function(overlap, genes) {
   
 }
 
-# get contig sequence for reference contigs
-get_contig_seqs <- function(contigs, genome) {
-  
-  # abort if genome is not a BSgenome or DNAStringSet object
-  if (!any(is(genome, "BSgenome") | is(genome, "DNAStringSet"))) {
-    
-    stop("genome must be of class BSgenome or DNAStringSet!", call. = FALSE)
-    
-  }
-  
-  # get sequences of contigs
-  extractTranscriptSeqs(genome, transcripts = contigs)
-  
-}
-
-# export GRanges object to gtf file
+# export GRanges object to gtf file. rtracklayers 'export()' function causes an error with STAR 
 export_gtf <- function(x, filepath) {
   
   # transform x into data.frame
@@ -244,7 +226,7 @@ export_gtf <- function(x, filepath) {
   
 }
 
-# create tap-seq alignment references --------------------------------------------------------------
+# create tap-seq alignment references ==============================================================
 
 create_tapseq_ref(txs_file = opt$txs_file, BSgenome_id = opt$BSgenome_id,
                   fasta_outfile = opt$fasta_outfile, gtf_outfile = opt$gtf_outfile)

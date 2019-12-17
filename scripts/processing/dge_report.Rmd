@@ -1,0 +1,288 @@
+---
+title: "CROP-seq DGE report"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+params:
+  rmd: "dge_report.Rmd"
+output:
+  html_document:
+    number_sections: yes
+    toc: yes
+---
+
+<br>
+
+```{r setup, include=FALSE}
+# set global chunk options
+knitr::opts_chunk$set(echo = FALSE)
+
+# load required packages
+library(tidyverse)
+library(here)
+library(plotly)
+```
+
+This report summarizes the results from the Digital Gene Expression (DGE) extraction for sample
+**`r snakemake@wildcards$sample`**.
+
+# Chimeric reads filtering
+To assess chimeric reads a measurement called "Transcripts-per-transcript (TPT)" proposed by
+[Dixit et al.](https://www.biorxiv.org/content/early/2016/12/12/093237.full.pdf) was computed
+during DGE extraction. Chimeric read events can introduce barcode switches, leading to reads of a
+particular transcript being paired with the cell and UMI barcodes of another transcript. TPT
+calculates the fraction of all reads for a given cell-UMI barcode combination map to each gene
+associated with that combination. Real transcripts are expected to have a high TPT value, because
+chimeric read events are assumed to be rare and therefore most reads will map to the true gene.
+Transcripts with a very low TPT on the other hand are more likely to come from chimeric reads
+events.
+
+<br>
+
+```{r tpt_histogram}
+# read tpt histogram data
+tpt_hist <- read.table(here(snakemake@input$tpt_hist), header = TRUE, stringsAsFactors = FALSE)
+
+# bin tpt values into better intervals for plotting
+bins <- seq(0, 1, by = 0.1)
+tpt_hist_plot <- tpt_hist %>%
+  mutate(tpt_bin = cut(tpt, bins)) %>%
+  group_by(tpt_bin) %>%
+  summarize(transcripts = sum(transcripts))
+
+# plot histogram
+ggplot(tpt_hist_plot, aes(x = tpt_bin, y = transcripts)) +
+  geom_bar(stat = "identity") +
+  labs(x = "Transcripts-per-transcripts", y = "Transcripts", title = "TPT distribution") +
+  theme_bw()
+```
+
+Transcripts with a TPT value below `r snakemake@config$extract_dge$tpt_threshold` were considered
+to be the result of chimeric read events and were filtered out during DGE extraction.
+
+***
+
+# DGE data
+```{r dge_summary_stats}
+# read dge summary statistics
+dge_stats <- read.table(here(snakemake@input$dge_stats), header = TRUE, stringsAsFactors = FALSE)
+
+# sort dge_stats according to number of detected transcripts and transform cell barcode into factor
+dge_stats <- arrange(dge_stats, desc(transcripts)) %>%
+  mutate(cell_barcode = forcats::fct_inorder(cell_barcode))
+
+# calculate number of cell barcodes lost because of cell barcode whitelist filtering (for text only)
+ncells <- snakemake@config$cell_numbers[[snakemake@wildcards$sample]]
+filt_cells <- ncells - nrow(dge_stats)
+```
+Expression data were extracted for `r ncells` cells. After filtering for cell barcodes on
+whitelist and chimeric reads, a total of **`r nrow(dge_stats)` cells** remain in the DGE data.
+`r filt_cells` cells were filtered out.
+
+## Summary stats
+These plots show the number of genic reads, transcripts (UMIs) and genes detected per cell.
+
+<br>
+
+```{r plot_stats}
+# number of transcripts
+ggplot(dge_stats, aes(x = cell_barcode, y = transcripts)) +
+  geom_bar(stat = "identity") + 
+  labs(title = paste(snakemake@wildcards$sample, "number of transcripts")) +
+  theme_bw() +
+  theme(axis.text.x=element_blank(), axis.ticks.x=element_blank(), panel.grid = element_blank())
+
+# number of genic reads
+ggplot(dge_stats, aes(x = cell_barcode, y = genic_reads)) + 
+  geom_bar(stat = "identity") + 
+  labs(title = paste(snakemake@wildcards$sample, "number of genic reads")) +
+  theme_bw() +
+  theme(axis.text.x=element_blank(), axis.ticks.x=element_blank(), panel.grid = element_blank())
+
+# number of detected genes
+ggplot(dge_stats, aes(x = cell_barcode, y = genes)) + 
+  geom_bar(stat = "identity") + 
+  labs(title = paste(snakemake@wildcards$sample, "number of detected genes")) +
+  theme_bw() +
+  theme(axis.text.x=element_blank(), axis.ticks.x=element_blank(), panel.grid = element_blank())
+```
+
+## Genic reads vs. detected transcripts
+The number of detected transcripts is plotted against the number of genic reads. High quality cells
+are expected to show a reasonably good correlation of genic reads and transcripts. For bad cells (or
+wrong cell barcodes) genic reads tend to map to fewer transcripts and extremes can be detected as
+outliers in this plot.
+
+<br>
+
+```{r reads_vs_transcripts}
+# create scatter plot with plotly for small datasets or ggplot for larget datasets (>20k cells)
+if (nrow(dge_stats) <= 20000) {
+  
+  # create scatter plot
+  p <- plot_ly(dge_stats) %>%
+    add_trace(x = ~transcripts, y = ~genic_reads, type = "scatter", mode = "markers",
+              marker = list(opacity = 0.75, line = list(width = 2)), hoverinfo = "text",
+              text = ~paste0("Cell barcode: ", cell_barcode, "\n",
+                             "Genic reads: ", genic_reads, "\n",
+                             "Transcripts: ", transcripts))
+  
+  # define axes and title
+  xaxis <- list(title = "Number of detected transcripts (UMIs)", type = "log")
+  yaxis <- list(title = "Number of genic reads", type = "log")
+  title <- "Genic reads vs. transcripts"
+  
+  # add layout and print plot
+layout(p, xaxis = xaxis, yaxis = yaxis, title = title)
+  
+}else{
+
+  # create scatter plot
+  ggplot(dge_stats, aes(x = transcripts, y = genic_reads)) +
+    geom_abline() +
+    geom_point(color = "#1f77b4") +
+    labs(x = "Number of detected transcripts (UMIs)", y = "Number of genic reads",
+         title = "Genic reads vs. transcripts") +
+    scale_x_log10() +
+    scale_y_log10() +
+    theme_bw()
+
+}
+```
+
+
+## Number of transcripts per cell distribution
+The number of detected transcripts per cell distribution is plotted to help identify low quality
+cells that should be filtered out during downstream analyses.
+
+<br>
+
+```{r transcripts_per_cell}
+# add index for plotting
+dge_stats$index <- 1:nrow(dge_stats)
+
+# create scatter plot with plotly for small datasets or ggplot for larget datasets (>20k cells)
+if (nrow(dge_stats) <= 20000) {
+
+  # create plot
+  p <- plot_ly(dge_stats) %>%
+    add_trace(x = ~index, y = ~transcripts, type = "scatter", mode = "markers",
+              marker = list(color = "darkgray"), name = "Cells", hoverinfo = "none") %>%
+    add_trace(x ~index, y = ~transcripts, type = "scatter", mode = "lines",
+              line = list(color = "#1f77b4"), name = "transcripts per cell",
+              hoverinfo = "text", text = ~paste0("Cells: ", index, "\n",
+                              "UMIs cell i: ", transcripts))
+  
+  # define axes and title
+  xaxis <- list(title = "Cell barcodes sorted by number of transcripts [descending]")
+  yaxis <- list(title = "Number of transcripts", type = "log")
+  title <- "Number of transcripts per cell"
+  
+  # add layout and print plot
+  layout(p, xaxis = xaxis, yaxis = yaxis, title = title)
+  
+}else{
+  
+  ggplot(dge_stats, aes(x = index, y = transcripts)) +
+    geom_point(color = "darkgray") +
+    geom_line(color = "#1f77b4") +
+    labs(x = "Cell barcodes sorted by number of transcripts [descending]",
+         y = "Number of transcripts", title = "Number of transcripts per cell") +
+    scale_y_log10() +
+    theme_bw()
+  
+}
+```
+
+***
+
+# Transfected vectors
+
+## Number of vector transcripts per cell
+The number of vector transcripts per cell is plotted.
+
+<br>
+
+```{r}
+# load dge data
+dge <- read.table(here(snakemake@input$dge), header = TRUE, stringsAsFactors = FALSE)
+
+# extract vector transcripts
+vctr_dge <- dge %>%
+  filter(grepl(GENE, pattern = snakemake@params$vector_prefix)) %>%
+  gather(key = "cell", value = "txs", -GENE)
+  
+# count number of total vector molecules per cell
+vctr_txs_per_cell <- vctr_dge %>%
+  group_by(cell) %>%
+  summarize(vctr_txs = sum(txs))
+
+# plot number of transcripts per cell distribution
+ggplot(vctr_txs_per_cell, aes(vctr_txs)) +
+  geom_histogram(bins = 25) +
+  labs(x = "Vector transcripts", y = "Cells", title = "Vector transcripts per cell") +
+  theme_bw()
+```
+
+## Perturbations per cell
+The distribution of the number of detected perturbations per cell is plotted. A minimum number of
+`r snakemake@params$min_txs` transcripts per vector were required to call perturbations.
+
+<br>
+
+```{r}
+# load perturbation matrix
+perturb <- read.table(here(snakemake@input$perturb_stats), header = TRUE, stringsAsFactors = FALSE)
+
+# convert to long format
+perturb <- perturb %>%
+  gather(key = "cell", value = "pert", -VECTOR)
+
+# compute the number of perturbations per cell
+pert_per_cell <- perturb %>%
+  group_by(cell) %>%
+  summarize(pert_per_cell = sum(pert)) %>%
+  count(pert_per_cell)
+
+# plot number of perturbations per cell
+ggplot(pert_per_cell, aes(x = pert_per_cell, y = n)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = n), vjust = 0) +
+  labs(x = "Perturbations", y = "Cells", title = "Perturbations per cell") +
+  theme_bw()
+```
+
+## Cells per perturbation
+The number of cell per detected perturbation (vector) is plotted to see if some vectors are depleted
+from the sample.
+
+<br>
+
+```{r}
+# calculate number of cells per perturbation
+cells_per_pert <- perturb %>%
+  group_by(VECTOR) %>%
+  summarize(cells = sum(pert))
+
+# plot number of cell per perturbation
+p <- ggplot(cells_per_pert,
+            aes(x = forcats::fct_reorder(VECTOR, .x = cells, .desc = TRUE), y = cells)) +
+  geom_bar(stat = "identity") +
+  theme_bw() +
+  labs(x = "Perturbation", y = "Cells", title = "Number of cells per perturbation") +
+  theme_bw()
+
+# print plot with layout appropriate for number of perturbations
+if (nrow(cells_per_pert) <= 30) {
+  p + coord_flip()
+}else{
+  p + theme(axis.text.x=element_blank(), axis.ticks.x=element_blank(), panel.grid = element_blank())
+}
+```
+
+***
+
+# Source
+* <a download="dge_report.Rmd" href="`r base64enc::dataURI(file = params$rmd, mime = 'text/rmd',
+    encoding = 'base64')`">R Markdown source file (to produce this document)</a>
+* [Drop-seq webpage (McCarroll Lab)](http://mccarrolllab.com/dropseq/)
+* [Dixit et al., 2016](https://www.biorxiv.org/content/10.1101/093237v1)
+* [TPT filtering algorithm](https://github.com/asncd/schimera)

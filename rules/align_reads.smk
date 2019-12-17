@@ -268,8 +268,8 @@ rule align_report:
   output:
     "results/alignment/{sample}_align_report.html"
   params:
-    expect_cells = lambda wildcards: config["expect_cell_numbers"][wildcards.sample],
+    expect_cells = lambda wildcards: config["cell_numbers"][wildcards.sample],
     bc_structure = lambda wildcards: config["bc_structure"][wildcards.sample]
   conda: "../envs/r_dropseq_tools.yml"
   script:
-    "../scripts/align_report.Rmd"
+    "../scripts/processing/align_report.Rmd"

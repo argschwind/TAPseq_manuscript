@@ -17,7 +17,7 @@ knitr::opts_chunk$set(echo = FALSE)
 
 # load required functions and packages
 library(here)
-source(here("scripts/align_report_fun.R"))
+source(here("scripts/processing/align_report_fun.R"))
 ```
 
 This report shows summary statistics produced by the Drop-seq alignment pipeline for sample
@@ -106,7 +106,7 @@ two distributions is estimated as a cutoff to choose the number of cells per exp
 sample <- snakemake@wildcards$sample
 
 # extract expected cell number from snakemake object
-expect_cells <- as.numeric(snakemake@config$expect_cell_numbers[sample])
+expect_cells <- as.numeric(snakemake@config$cell_numbers[sample])
 
 # compute the reads per cell barcode distribution for the top x cells, where
 # x is the number of expected cells * 2 and compute local minimum in

@@ -2,6 +2,14 @@
 
 ### input, output and shell paths are all relative to the project directory ###
 
+# some samples do not contain any perturbations and therefore the dge report is different and the
+# rule "perturbation_status" does not need to be executed. the wildcards for the rule 
+# "perturbation_status" are resticted to samples with perturbations (see rule) so that it can only
+# be executed for these samples. snakemake's ruleorder feature is used to compile the regular
+# dge report unless "perturbation_status" can't be executed and therefore a dge report without
+# perturbations is created.
+ruleorder: dge_report > dge_report_no_perts
+
 # python function(s) to infer more complex input files ---------------------------------------------
 
 # get cell barcode whitelist file for a given sample
@@ -39,7 +47,7 @@ rule umi_observations:
   log:
     "data/{sample}/logs/umi_observations.log"
   params:
-    ncells = lambda wildcards: config["dge_ncells"][wildcards.sample],
+    ncells = lambda wildcards: config["cell_numbers"][wildcards.sample],
     edit_distance = config["umi_observations"]["edit_distance"],
     read_mq = config["umi_observations"]["read_mq"],
     min_umi_reads = config["umi_observations"]["min_umi_reads"],
@@ -74,8 +82,8 @@ rule extract_dge:
   conda:
     "../envs/dropseq_tools.yml"
   shell:
-    "python scripts/extract_dge.py -i {input.umi_obs} -o {output.dge} {params.whitelist_arg}"
-    "--tpt_threshold {params.tpt_threshold} 2> {log}"
+    "python scripts/processing/extract_dge.py -i {input.umi_obs} -o {output.dge} "
+    "{params.whitelist_arg} --tpt_threshold {params.tpt_threshold} 2> {log}"
     
 # infer perturbation status of each cell
 rule perturbation_status:
@@ -85,15 +93,17 @@ rule perturbation_status:
     "data/{sample}/perturb_status.txt"
   log:
     "data/{sample}/logs/perturbation_status.log"
+  wildcard_constraints:
+     sample = "(" + "|".join(list(config["perturbation_status"]["min_txs"].keys())) + ")"
   params:
     vector_prefix = config["create_vector_ref"]["vector_prefix"],
     min_txs = lambda wildcards: config["perturbation_status"]["min_txs"][wildcards.sample]
   conda:
     "../envs/r_dropseq_tools.yml"
   shell:
-    "Rscript scripts/perturbation_status.R --infile {input} --outfile {output} "
+    "Rscript scripts/processing/perturbation_status.R --infile {input} --outfile {output} "
     "--vector_patter {params.vector_prefix} --min_txs {params.min_txs} --trim 2> {log}"
-
+    
 # compile dge report
 rule dge_report:
   input:
@@ -104,8 +114,22 @@ rule dge_report:
   output:
     "results/dge/{sample}_dge_report.html"
   params:
-    vector_prefix = config["create_vector_ref"]["vector_prefix"]
+    vector_prefix = config["create_vector_ref"]["vector_prefix"],
+    min_txs = lambda wildcards: config["perturbation_status"]["min_txs"][wildcards.sample]
   conda:
     "../envs/r_dropseq_tools.yml"
   script:
-    "../scripts/dge_report.Rmd"
+    "../scripts/processing/dge_report.Rmd"
+    
+# compile dge report for samples without perturbations
+rule dge_report_no_perts:
+  input:
+    dge = "data/{sample}/dge.txt",
+    tpt_hist = "data/{sample}/dge_tpt_histogram.txt",
+    dge_stats = "data/{sample}/dge_summary.txt"
+  output:
+    "results/dge/{sample}_dge_report.html"
+  conda:
+    "../envs/r_dropseq_tools.yml"
+  script:
+    "../scripts/processing/dge_report_no_perts.Rmd"
