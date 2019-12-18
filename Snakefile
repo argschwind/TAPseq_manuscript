@@ -8,6 +8,7 @@ include: "rules/create_alignment_refs.smk"
 include: "rules/align_reads.smk"
 include: "rules/extract_dge.smk"
 include: "rules/analyses.smk"
+include: "rules/revision_analyses.smk"
 
 # ALL FUNCTION -------------------------------------------------------------------------------------
 
@@ -35,7 +36,7 @@ rule alignment_references:
         "hg38_tapseq_ref_chr11_screen", "hg38_genome_ref_v2", "hg38_tapseq_ref_validation_v2",
         "hg38_tapseq_ref_validation_v3", "hg38_genome_ref_dropseq", "hg38_tapseq_ref_dropseq",
         "mm10_genome_ref", "hg38_genome_ref_rev", "hg38_tapseq_ref_rev", "mm10_tapseq_ref_mix",
-        "hg38_tapseq_ref_l1000"],
+        "hg38_genome_ref_mix", "hg38_tapseq_ref_mix", "hg38_tapseq_ref_l1000"],
       ref_file = ["cropseq_ref.dict", "cropseq_ref.refFlat", "genomeDir"])
 
 # run workflow until read alignment. this allows to determine the number of cells before extracting

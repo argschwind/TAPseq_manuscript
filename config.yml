@@ -17,6 +17,14 @@ samples:
   DanielUnclear: /g/steinmetz/schraivo
   W4ea: /g/steinmetz/incoming/solexa/2017-11-07-HW3MVBGX3/lane1/LIB26096_RBA25548/fastq
   T4ea: /g/steinmetz/incoming/solexa/2017-11-07-HW3MVBGX3/lane1/LIB26093_RBA25545/fastq
+  # mouse cell type mix:
+  wtxmmix: /g/steinmetz/incoming/solexa/2019-12-11-HNW3JBGXC/lane1/LIB49660_RBA49151/fastq
+  wtxlung: /g/steinmetz/incoming/solexa/2019-12-11-HNW3JBGXC/lane1/LIB49661_RBA49152/fastq
+  tapmix:  /g/steinmetz/incoming/solexa/2019-12-17-HYG5TBGXC/lane1/LIB49694_RBA49185/fastq
+  taplung: /g/steinmetz/incoming/solexa/2019-12-17-HYG5TBGXC/lane1/LIB49692_RBA49183/fastq
+  # human cell type mix:
+  19s005246: /g/steinmetz/incoming/solexa/2019-12-17-HNTWCBGXC/lane1/LIB49711_RBA49202/fastq
+  taphumanmix: /g/steinmetz/incoming/solexa/2019-12-17-HYG5TBGXC/lane1/LIB49693_RBA49184/fastq
 
 # estimated number of cells per sample, for which dge data should be extracted.
 cell_numbers:
@@ -35,6 +43,12 @@ cell_numbers:
   DanielUnclear: 19000
   W4ea: 5000
   T4ea: 5000
+  wtxmmix: 400
+  wtxlung: 200
+  tapmix:  325
+  taplung: 130
+  19s005246: 750
+  taphumanmix: 400
   
 # cell and umi barcode base positions in barcode reads for each sample. the first element of the
 # array is the cell barcode range, while the second is the UMI barcode range. for screen samples the
@@ -56,6 +70,12 @@ bc_structure:
   DanielUnclear: [1-16, 17-26]
   W4ea: [1-12, 13-20]
   T4ea: [1-12, 13-20]
+  wtxmmix: [1-16, 17-26]
+  wtxlung: [1-16, 17-26]
+  tapmix:  [1-16, 17-26]
+  taplung: [1-16, 17-26]
+  19s005246: [1-16, 17-26]
+  taphumanmix: [1-16, 17-26]
   
 # alignment reference for each sample
 align_ref:
@@ -74,6 +94,12 @@ align_ref:
   DanielUnclear: data/alignment_references/hg38_tapseq_ref_validation_v3
   W4ea:  data/alignment_references/hg38_genome_ref_dropseq
   T4ea:  data/alignment_references/hg38_tapseq_ref_dropseq
+  wtxmmix: data/alignment_references/mm10_genome_ref
+  wtxlung: data/alignment_references/mm10_genome_ref
+  tapmix:  data/alignment_references/mm10_tapseq_ref_mix
+  taplung: data/alignment_references/mm10_tapseq_ref_mix
+  19s005246: data/alignment_references/hg38_genome_ref_mix
+  taphumanmix: data/alignment_references/hg38_tapseq_ref_mix
   
 # number of minimum molecules per CROP-seq vector to define a cell perturbed for a given vector
 perturbation_status:
@@ -99,6 +125,8 @@ validation:   [11iv210ng, 11iv22ng, 8iv210ng, 8iv22ng, Sample10X]
 screen:       [8iScreen1, 11iScreen1]
 tap_vs_whole: [WholeTx, TAP1, TAP2]
 drop-seq:     [W4ea, T4ea]
+mouse_mix:    [wtxmmix, wtxlung, tapmix, taplung]
+human_mix:    [19s005246, taphumanmix]
 
 ## PARAMETERS FOR INDIVIDUAL RULES =================================================================
 
@@ -121,6 +149,7 @@ create_tapseq_ref:
     hg38_tapseq_ref_dropseq: meta_data/target_gene_panels/target_genes_validation.gtf
     hg38_tapseq_ref_rev: meta_data/target_gene_panels/target_genes_chr8_rev.gtf
     mm10_tapseq_ref_mix: meta_data/target_gene_panels/target_genes_mouse_mix.gtf
+    hg38_tapseq_ref_mix: meta_data/target_gene_panels/target_genes_chr8_rev.gtf
     hg38_tapseq_ref_l1000: meta_data/target_gene_panels/target_genes_L1000.gtf.gz
   BSgenome_id: 
     hg38: BSgenome.Hsapiens.UCSC.hg38
@@ -198,6 +227,12 @@ downsample:
     DanielUnclear: [1000, 1500, 3500, 5000, 7000]
     W4ea: [1000]
     T4ea: [1000, 1500, 3500, 5000, 10000, 15000]
+    wtxmmix: [1000, 1500, 3500, 5000, 10000, 15000, 20000, 40000, 80000, 160000, 320000]
+    wtxlung: [1000, 1500, 3500, 5000, 10000, 15000, 20000, 40000, 80000, 160000]
+    tapmix:  [1000, 1500, 3500, 5000, 10000, 15000, 20000, 40000, 80000, 160000, 320000]
+    taplung: [1000, 1500, 3500, 5000, 10000, 15000, 20000, 40000, 80000, 160000, 320000]
+    19s005246:   [1000, 1500, 3500, 5000, 10000, 15000, 20000, 40000, 80000, 160000, 250000]
+    taphumanmix: [1000, 1500, 3500, 5000, 10000, 15000, 20000, 40000, 80000, 160000, 250000, 500000]
     
 collapse_perturbations:
   targets:
