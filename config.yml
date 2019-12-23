@@ -309,3 +309,47 @@ chromatin_analyses:
     POLR2A:    "https://www.encodeproject.org/files/ENCFF438GBD/@@download/ENCFF438GBD.bam"
     Dnase-seq: "https://www.encodeproject.org/files/ENCFF538GKX/@@download/ENCFF538GKX.bam"
   rao_hic: "ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE63nnn/GSE63525/suppl/GSE63525_K562_intrachromosomal_contact_matrices.tar.gz"
+  
+# bulk RNA-seq processing --------------------------------------------------------------------------
+
+# bulk RNA-seq samples (fastq files)
+rnaseq_samples:
+  bulkNeutro: /g/steinmetz/incoming/solexa/2019-12-17-HY52NBGXC/lane1/LIB49712_RBA49203/fastq/HY52NBGXC_mmix_hmix_bulk_19s005247-1-1_Schraivogel_lane1bulkNeutro_sequence.txt.gz
+  bulkmESC:   /g/steinmetz/incoming/solexa/2019-12-17-HY52NBGXC/lane1/LIB49713_RBA49204/fastq/HY52NBGXC_mmix_hmix_bulk_19s005247-1-1_Schraivogel_lane1bulkmESC_sequence.txt.gz
+  bulk3T3:    /g/steinmetz/incoming/solexa/2019-12-17-HY52NBGXC/lane1/LIB49714_RBA49205/fastq/HY52NBGXC_mmix_hmix_bulk_19s005247-1-1_Schraivogel_lane1bulk3T3_sequence.txt.gz
+  bulklung:   /g/steinmetz/incoming/solexa/2019-12-17-HY52NBGXC/lane1/LIB49716_RBA49207/fastq/HY52NBGXC_mmix_hmix_bulk_19s005247-1-1_Schraivogel_lane1bulklung_sequence.txt.gz
+  bulkAML:    /g/steinmetz/incoming/solexa/2019-12-17-HY52NBGXC/lane1/LIB49717_RBA49208/fastq/HY52NBGXC_mmix_hmix_bulk_19s005247-1-1_Schraivogel_lane1bulkAML_sequence.txt.gz
+  bulkK562:   /g/steinmetz/incoming/solexa/2019-12-17-HY52NBGXC/lane1/LIB49715_RBA49206/fastq/HY52NBGXC_mmix_hmix_bulk_19s005247-1-1_Schraivogel_lane1bulkK562_sequence.txt.gz
+
+# kalisto indices for RNA-seq samples
+kallisto_index:
+  bulkNeutro: data/bulk_rnaseq/kallisto_txs_indices/mus_musculus/transcriptome.idx
+  bulkmESC:   data/bulk_rnaseq/kallisto_txs_indices/mus_musculus/transcriptome.idx
+  bulk3T3:    data/bulk_rnaseq/kallisto_txs_indices/mus_musculus/transcriptome.idx
+  bulklung:   data/bulk_rnaseq/kallisto_txs_indices/mus_musculus/transcriptome.idx
+  bulkAML:    data/bulk_rnaseq/kallisto_txs_indices/homo_sapiens/transcriptome.idx
+  bulkK562:   data/bulk_rnaseq/kallisto_txs_indices/homo_sapiens/transcriptome.idx
+
+# URLs to download kallisto indices
+download_kallisto_index:
+  homo_sapiens: "https://github.com/pachterlab/kallisto-transcriptome-indices/releases/download/ensembl-96/homo_sapiens.tar.gz"
+  mus_musculus: "https://github.com/pachterlab/kallisto-transcriptome-indices/releases/download/ensembl-96/mus_musculus.tar.gz"
+
+# parameters for kallisto  
+kallisto_quant:
+  threads: 5
+  bootstrap: 100
+  frag_len:
+    bulkNeutro: 373
+    bulkmESC:   450
+    bulk3T3:    439
+    bulklung:   332
+    bulkAML:    529
+    bulkK562:   431
+  frag_sd:
+    bulkNeutro: 150
+    bulkmESC:   150
+    bulk3T3:    150
+    bulklung:   150
+    bulkAML:    150
+    bulkK562:   150
