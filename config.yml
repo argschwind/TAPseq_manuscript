@@ -23,8 +23,17 @@ samples:
   tapmix:  /g/steinmetz/incoming/solexa/2019-12-17-HYG5TBGXC/lane1/LIB49694_RBA49185/fastq
   taplung: /g/steinmetz/incoming/solexa/2019-12-17-HYG5TBGXC/lane1/LIB49692_RBA49183/fastq
   # human cell type mix:
-  19s005246: /g/steinmetz/incoming/solexa/2019-12-17-HNTWCBGXC/lane1/LIB49711_RBA49202/fastq
+  19s005246:   /g/steinmetz/incoming/solexa/2019-12-17-HNTWCBGXC/lane1/LIB49711_RBA49202/fastq
   taphumanmix: /g/steinmetz/incoming/solexa/2019-12-17-HYG5TBGXC/lane1/LIB49693_RBA49184/fastq
+  # chr8 primer redesign
+  perturbchr8v2:   /g/steinmetz/incoming/solexa/2019-12-19-HYLKVBGXC/lane1/LIB49738_RBA49229/fastq
+  perturbchr8alt1: /g/steinmetz/incoming/solexa/2019-12-19-HYLKVBGXC/lane1/LIB49742_RBA49233/fastq
+  perturbchr8alt2: /g/steinmetz/incoming/solexa/2019-12-19-HYLKVBGXC/lane1/LIB49740_RBA49231/fastq
+  # l1000 samples
+  perturbL1000:  /g/steinmetz/incoming/solexa/2019-12-19-HY5JNBGXC/lane1/LIB49746_RBA49237/fastq
+  perturbL1000a: /g/steinmetz/incoming/solexa/2019-12-19-HY5JNBGXC/lane1/LIB49744_RBA49235/fastq
+  perturbL1000b: /g/steinmetz/incoming/solexa/2019-12-19-HY5JNBGXC/lane1/LIB49745_RBA49236/fastq
+  perturb10xWTX: /g/steinmetz/project/singcellTxn/CRISPRdrop/10X_RAW_DATA/perturb10xWTX
 
 # estimated number of cells per sample, for which dge data should be extracted.
 cell_numbers:
@@ -49,6 +58,13 @@ cell_numbers:
   taplung: 130
   19s005246: 750
   taphumanmix: 400
+  perturbchr8v2: 2000
+  perturbchr8alt1: 9000
+  perturbchr8alt2: 8000
+  perturbL1000:  9000
+  perturbL1000a: 8000
+  perturbL1000b: 9500
+  perturb10xWTX: 8300
   
 # cell and umi barcode base positions in barcode reads for each sample. the first element of the
 # array is the cell barcode range, while the second is the UMI barcode range. for screen samples the
@@ -76,6 +92,13 @@ bc_structure:
   taplung: [1-16, 17-26]
   19s005246: [1-16, 17-26]
   taphumanmix: [1-16, 17-26]
+  perturbchr8v2: [1-16, 17-26] 
+  perturbchr8alt1: [1-16, 17-26]
+  perturbchr8alt2: [1-16, 17-26]
+  perturbL1000:  [1-16, 17-26]
+  perturbL1000a: [1-16, 17-26]
+  perturbL1000b: [1-16, 17-26]
+  perturb10xWTX: [1-16, 17-26]
   
 # alignment reference for each sample
 align_ref:
@@ -100,6 +123,13 @@ align_ref:
   taplung: data/alignment_references/mm10_tapseq_ref_mix
   19s005246: data/alignment_references/hg38_genome_ref_mix
   taphumanmix: data/alignment_references/hg38_tapseq_ref_mix
+  perturbchr8v2: data/alignment_references/hg38_tapseq_ref_rev
+  perturbchr8alt1: data/alignment_references/hg38_tapseq_ref_rev
+  perturbchr8alt2: data/alignment_references/hg38_tapseq_ref_rev
+  perturbL1000:  data/alignment_references/hg38_tapseq_ref_l1000
+  perturbL1000a: data/alignment_references/hg38_tapseq_ref_l1000
+  perturbL1000b: data/alignment_references/hg38_tapseq_ref_l1000
+  perturb10xWTX: data/alignment_references/hg38_genome_ref_rev
   
 # number of minimum molecules per CROP-seq vector to define a cell perturbed for a given vector
 perturbation_status:
@@ -119,6 +149,13 @@ perturbation_status:
     DanielUnclear: 8
     W4ea: 2
     T4ea: 8
+    perturbchr8v2: 8
+    perturbchr8alt1: 8
+    perturbchr8alt2: 8
+    perturbL1000: 8
+    perturbL1000a: 8
+    perturbL1000b: 8
+    perturb10xWTX: 8
     
 # sample ids for different experiments
 validation:   [11iv210ng, 11iv22ng, 8iv210ng, 8iv22ng, Sample10X]
@@ -127,6 +164,8 @@ tap_vs_whole: [WholeTx, TAP1, TAP2]
 drop-seq:     [W4ea, T4ea]
 mouse_mix:    [wtxmmix, wtxlung, tapmix, taplung]
 human_mix:    [19s005246, taphumanmix]
+chr8_reps:    [perturbchr8v2, perturbchr8alt1, perturbchr8alt2]
+l1000:        [perturbL1000, perturbL1000a, perturbL1000b, perturb10xWTX]
 
 ## PARAMETERS FOR INDIVIDUAL RULES =================================================================
 
@@ -233,6 +272,13 @@ downsample:
     taplung: [1000, 1500, 3500, 5000, 10000, 15000, 20000, 40000, 80000, 160000, 320000]
     19s005246:   [1000, 1500, 3500, 5000, 10000, 15000, 20000, 40000, 80000, 160000, 250000]
     taphumanmix: [1000, 1500, 3500, 5000, 10000, 15000, 20000, 40000, 80000, 160000, 250000, 500000]
+    perturbchr8v2:   [500, 1000, 1500, 2000, 5000, 10000, 20000, 40000]
+    perturbchr8alt1: [500, 1000, 1500, 2000]
+    perturbchr8alt2: [500, 1000, 1500, 2000, 5000, 10000]
+    perturbL1000:  [1000, 2500, 5000, 7500, 7800]
+    perturbL1000a: [1000, 2500, 5000, 7500, 7800]
+    perturbL1000b: [1000, 2500, 5000, 7500, 7800]
+    perturb10xWTX: [1000, 2500, 5000, 7500, 7800]
     
 collapse_perturbations:
   targets:

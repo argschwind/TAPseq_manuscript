@@ -9,6 +9,7 @@ include: "rules/align_reads.smk"
 include: "rules/extract_dge.smk"
 include: "rules/analyses.smk"
 include: "rules/revision_analyses.smk"
+include: "rules/process_rnaseq.smk"
 
 # ALL FUNCTION -------------------------------------------------------------------------------------
 
@@ -51,3 +52,9 @@ rule dge:
   input:
     align = expand("results/alignment/{sample}_align_report.html", sample = config["samples"]),
     dge = expand("results/dge/{sample}_dge_report.html", sample = config["samples"])
+    
+# process all bulk RNA-seq samples
+rule rnaseq:
+  input:
+    expand("data/bulk_rnaseq/{sample}/abundance.{format}", sample = config["rnaseq_samples"],
+      format = ["h5", "tsv"])
