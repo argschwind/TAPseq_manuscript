@@ -13,10 +13,10 @@ rule downsample_revision_data:
              rpc = config["downsample"]["reads_per_cell"]["tapmix"]),
            expand("data/taplung/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
              rpc = config["downsample"]["reads_per_cell"]["taplung"]),
-#           expand("data/19s005246/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
-#             rpc = config["downsample"]["reads_per_cell"]["19s005246"]),
-#           expand("data/taphumanmix/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
-#             rpc = config["downsample"]["reads_per_cell"]["taphumanmix"]),
+           expand("data/19s005246/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+             rpc = config["downsample"]["reads_per_cell"]["19s005246"]),
+           expand("data/taphumanmix/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+             rpc = config["downsample"]["reads_per_cell"]["taphumanmix"]),
            expand("data/perturbchr8v2/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
              rpc = config["downsample"]["reads_per_cell"]["perturbchr8v2"]),
            expand("data/perturbchr8alt1/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
@@ -30,7 +30,11 @@ rule downsample_revision_data:
            expand("data/perturbL1000b/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
              rpc = config["downsample"]["reads_per_cell"]["perturbL1000b"]),
            expand("data/perturb10xWTX/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
-             rpc = config["downsample"]["reads_per_cell"]["perturb10xWTX"])]
+             rpc = config["downsample"]["reads_per_cell"]["perturb10xWTX"]),
+           expand("data/tapk562deep/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+             rpc = config["downsample"]["reads_per_cell"]["tapk562deep"]),
+           expand("data/wtxk562deep/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+             rpc = config["downsample"]["reads_per_cell"]["wtxk562deep"])]
 
 # filter mouse cell type mix data  (umi obs) for the 150 genes that are expressed in all cells
 rule filter_mmix:
@@ -48,7 +52,7 @@ rule filter_mmix:
 rule downsample_150_genes:
   input:
     umi_obs = "data/{sample}/umi_obs_150_common_genes.txt",
-    whitelist = get_cbc_whitelist
+    whitelist = lambda wildcards: config["10x_cbc_whitelist"][wildcards.sample]
   output:
     dge = "data/{sample}/downsampled_150_genes/dge_{rpc}_avg_reads_per_cell.txt",
     dge_stats = "data/{sample}/downsampled_150_genes/dge_{rpc}_avg_reads_per_cell_summary.txt",

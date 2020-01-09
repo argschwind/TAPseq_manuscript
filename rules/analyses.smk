@@ -9,24 +9,9 @@ def fastq_read2(sample):
   fastq_dir = config["samples"][sample]
   f2 = glob.glob(fastq_dir + "/*" + sample  + "_2_sequence.txt.gz")
   return f2
-
-# get cell barcode whitelist file for a given sample
-def get_cbc_whitelist(wildcards):
-  sample = wildcards.sample
-  if sample in config["screen"]:
-    whitelist = "meta_data/10x_cell_barcode_whitelists/screen_10x_bc_whitelist_737k_201608.txt.gz"
-  elif sample == "WholeTx":
-    whitelist = "meta_data/10x_cell_barcode_whitelists/wholeTx_10x_bc_whitelist_737k_201608.txt.gz"
-  elif sample == "TAP":
-    whitelist = "meta_data/10x_cell_barcode_whitelists/TAP_10x_bc_whitelist_737k_201608.txt.gz"
-  elif sample in config["drop-seq"]:
-    whitelist = []  # no cell barcode whitelist available for drop-seq samples
-  else:
-    whitelist = "meta_data/10x_cell_barcode_whitelists/10x_bc_whitelist_737k_201608.txt"
-  return whitelist
   
-# create whitelist argument for extract_dge.py. required because whitelist can be an empty list
-# (see above), which needs to be translated to an empty ('') string argument
+# create whitelist argument for extract_dge.py. required because whitelist can be an empty list,
+# which needs to be translated to an empty ('') string argument
 def get_whitelist_arg(whitelist):
   if isinstance(whitelist, str):
     whitelist_arg = "-w " + whitelist + " "
@@ -52,7 +37,7 @@ def perturb_status_file(wildcards):
 rule downsample:
   input:
     umi_obs = "data/{sample}/umi_observations.txt",
-    whitelist = get_cbc_whitelist
+    whitelist = lambda wildcards: config["10x_cbc_whitelist"][wildcards.sample]
   output:
     dge = "data/{sample}/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
     dge_stats = "data/{sample}/downsampled/dge_{rpc}_avg_reads_per_cell_summary.txt",
@@ -65,10 +50,11 @@ rule downsample:
   log: "data/{sample}/logs/downsample_{rpc}_avg_reads_per_cell.log"
   conda: "../envs/dropseq_tools.yml"
   shell:
-    "python scripts/processing/extract_dge.py -i {input.umi_obs} -o {output.dge} {params.whitelist_arg}"
-    "--sample {params.reads} --seed {params.seed} --tpt_threshold {params.tpt_threshold} 2> {log}"
+    "python scripts/processing/extract_dge.py -i {input.umi_obs} {params.whitelist_arg}"
+    "-o {output.dge} --sample {params.reads} --seed {params.seed} "
+    "--tpt_threshold {params.tpt_threshold} 2> {log}"
   
-# calculate reads on target genes enrichment
+# calculate reads on target genes enrichment for TAP-seq vs CROP-seq comparison
 rule reads_on_target:
   input:
     bam = ["data/" + sample + "/gene_tagged_aligned.bam" for sample in config["validation"]],

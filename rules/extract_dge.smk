@@ -10,25 +10,10 @@
 # perturbations is created.
 ruleorder: dge_report > dge_report_no_perts
 
-# python function(s) to infer more complex input files ---------------------------------------------
+# python function(s) to infer complex parameters  --------------------------------------------------
 
-# get cell barcode whitelist file for a given sample
-def get_cbc_whitelist(wildcards):
-  sample = wildcards.sample
-  if sample in config["screen"]:
-    whitelist = "meta_data/10x_cell_barcode_whitelists/screen_10x_bc_whitelist_737k_201608.txt.gz"
-  elif sample == "WholeTx":
-    whitelist = "meta_data/10x_cell_barcode_whitelists/wholeTx_10x_bc_whitelist_737k_201608.txt.gz"
-  elif sample == "TAP":
-    whitelist = "meta_data/10x_cell_barcode_whitelists/TAP_10x_bc_whitelist_737k_201608.txt.gz"
-  elif sample in config["drop-seq"]:
-    whitelist = []  # no cell barcode whitelist available for drop-seq samples
-  else:
-    whitelist = "meta_data/10x_cell_barcode_whitelists/10x_bc_whitelist_737k_201608.txt"
-  return whitelist
-
-# create whitelist argument for extract_dge.py. required because whitelist can be an empty list
-# (see above), which needs to be translated to an empty ('') string argument
+# create whitelist argument for extract_dge.py. required because whitelist can be an empty list,
+# which needs to be translated to an empty ('') string argument
 def get_whitelist_arg(whitelist):
   if isinstance(whitelist, str):
     whitelist_arg = "-w " + whitelist + " "
@@ -69,7 +54,7 @@ rule umi_observations:
 rule extract_dge:
   input:
     umi_obs = "data/{sample}/umi_observations.txt",
-    whitelist = get_cbc_whitelist
+    whitelist = lambda wildcards: config["10x_cbc_whitelist"][wildcards.sample]
   output:
     dge = "data/{sample}/dge.txt",
     dge_stats = "data/{sample}/dge_summary.txt",

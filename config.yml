@@ -17,6 +17,11 @@ samples:
   DanielUnclear: /g/steinmetz/schraivo
   W4ea: /g/steinmetz/incoming/solexa/2017-11-07-HW3MVBGX3/lane1/LIB26096_RBA25548/fastq
   T4ea: /g/steinmetz/incoming/solexa/2017-11-07-HW3MVBGX3/lane1/LIB26093_RBA25545/fastq
+  # mouse bone marow:
+  TAPtotalBM: /g/steinmetz/project/singcellTxn/CRISPRdrop/10X_RAW_DATA/bone_marrow_may2019/TAPtotalBM
+  TAPkitBM: /g/steinmetz/project/singcellTxn/CRISPRdrop/10X_RAW_DATA/bone_marrow_may2019/TAPkitBM
+  WholeTotalBM: /g/steinmetz/project/singcellTxn/CRISPRdrop/10X_RAW_DATA/bone_marrow_may2019/WholeTotalBM
+  WholeKitBM: /g/steinmetz/project/singcellTxn/CRISPRdrop/10X_RAW_DATA/bone_marrow_may2019/WholeKitBM
   # mouse cell type mix:
   wtxmmix: /g/steinmetz/incoming/solexa/2019-12-11-HNW3JBGXC/lane1/LIB49660_RBA49151/fastq
   wtxlung: /g/steinmetz/incoming/solexa/2019-12-11-HNW3JBGXC/lane1/LIB49661_RBA49152/fastq
@@ -34,6 +39,9 @@ samples:
   perturbL1000a: /g/steinmetz/incoming/solexa/2019-12-19-HY5JNBGXC/lane1/LIB49744_RBA49235/fastq
   perturbL1000b: /g/steinmetz/incoming/solexa/2019-12-19-HY5JNBGXC/lane1/LIB49745_RBA49236/fastq
   perturb10xWTX: /g/steinmetz/project/singcellTxn/CRISPRdrop/10X_RAW_DATA/perturb10xWTX
+  # additional chr11
+  tapk562deep: /g/steinmetz/incoming/solexa/2020-01-08-H2NJWBGXF/lane1/LIB49748_RBA49239/fastq
+  wtxk562deep: /g/steinmetz/incoming/solexa/2020-01-08-H2NJWBGXF/lane1/LIB49749_RBA49240/fastq
 
 # estimated number of cells per sample, for which dge data should be extracted.
 cell_numbers:
@@ -52,6 +60,10 @@ cell_numbers:
   DanielUnclear: 19000
   W4ea: 5000
   T4ea: 5000
+  TAPtotalBM: 8000
+  TAPkitBM: 6000
+  WholeTotalBM: 2300
+  WholeKitBM: 2300
   wtxmmix: 400
   wtxlung: 200
   tapmix:  325
@@ -65,6 +77,8 @@ cell_numbers:
   perturbL1000a: 8000
   perturbL1000b: 9500
   perturb10xWTX: 8300
+  tapk562deep: 680
+  wtxk562deep: 515
   
 # cell and umi barcode base positions in barcode reads for each sample. the first element of the
 # array is the cell barcode range, while the second is the UMI barcode range. for screen samples the
@@ -86,6 +100,10 @@ bc_structure:
   DanielUnclear: [1-16, 17-26]
   W4ea: [1-12, 13-20]
   T4ea: [1-12, 13-20]
+  TAPtotalBM: [1-24, 25-34]
+  TAPkitBM: [1-24, 25-34]
+  WholeTotalBM: [1-16, 17-26]
+  WholeKitBM: [1-16, 17-26]
   wtxmmix: [1-16, 17-26]
   wtxlung: [1-16, 17-26]
   tapmix:  [1-16, 17-26]
@@ -99,6 +117,8 @@ bc_structure:
   perturbL1000a: [1-16, 17-26]
   perturbL1000b: [1-16, 17-26]
   perturb10xWTX: [1-16, 17-26]
+  tapk562deep: [1-16, 17-26]
+  wtxk562deep: [1-16, 17-26]
   
 # alignment reference for each sample
 align_ref:
@@ -117,6 +137,10 @@ align_ref:
   DanielUnclear: data/alignment_references/hg38_tapseq_ref_validation_v3
   W4ea:  data/alignment_references/hg38_genome_ref_dropseq
   T4ea:  data/alignment_references/hg38_tapseq_ref_dropseq
+  TAPtotalBM: data/alignment_references/mm10_tapseq_ref_bone_marrow
+  TAPkitBM:   data/alignment_references/mm10_tapseq_ref_bone_marrow
+  WholeTotalBM: data/alignment_references/mm10_genome_ref
+  WholeKitBM: data/alignment_references/mm10_genome_ref
   wtxmmix: data/alignment_references/mm10_genome_ref
   wtxlung: data/alignment_references/mm10_genome_ref
   tapmix:  data/alignment_references/mm10_tapseq_ref_mix
@@ -130,7 +154,46 @@ align_ref:
   perturbL1000a: data/alignment_references/hg38_tapseq_ref_l1000
   perturbL1000b: data/alignment_references/hg38_tapseq_ref_l1000
   perturb10xWTX: data/alignment_references/hg38_genome_ref_rev
+  tapk562deep: data/alignment_references/hg38_tapseq_ref_chr11_noPert
+  wtxk562deep: data/alignment_references/hg38_genome_ref_mix
   
+# 10x cell barcode whitelist file for each sample
+10x_cbc_whitelist:
+  Sample10X: "meta_data/10x_cell_barcode_whitelists/10x_bc_whitelist_737k_201608.txt"
+  11iv210ng: "meta_data/10x_cell_barcode_whitelists/10x_bc_whitelist_737k_201608.txt"
+  11iv22ng: "meta_data/10x_cell_barcode_whitelists/10x_bc_whitelist_737k_201608.txt"
+  8iv210ng: "meta_data/10x_cell_barcode_whitelists/10x_bc_whitelist_737k_201608.txt"
+  8iv22ng: "meta_data/10x_cell_barcode_whitelists/10x_bc_whitelist_737k_201608.txt"
+  8iScreen1:  "meta_data/10x_cell_barcode_whitelists/screen_10x_bc_whitelist_737k_201608.txt.gz"
+  11iScreen1: "meta_data/10x_cell_barcode_whitelists/screen_10x_bc_whitelist_737k_201608.txt.gz"
+  WholeTx: "meta_data/10x_cell_barcode_whitelists/wholeTx_10x_bc_whitelist_737k_201608.txt.gz"
+  TAP1: "meta_data/10x_cell_barcode_whitelists/10x_bc_whitelist_737k_201608.txt"
+  TAP2: "meta_data/10x_cell_barcode_whitelists/10x_bc_whitelist_737k_201608.txt"
+  re-wholetx: "meta_data/10x_cell_barcode_whitelists/10x_bc_whitelist_737k_201608.txt"
+  re11iv210ng: "meta_data/10x_cell_barcode_whitelists/10x_bc_whitelist_737k_201608.txt"
+  DanielUnclear: "meta_data/10x_cell_barcode_whitelists/10x_bc_whitelist_737k_201608.txt"
+  W4ea: []  # No cell barcode whitelist available for Drop-seq samples
+  T4ea: []  # No cell barcode whitelist available for Drop-seq samples
+  TAPtotalBM: "meta_data/10x_cell_barcode_whitelists/bm_tap_10x_bc_whitelist_737k_201608.txt.gz"
+  TAPkitBM:   "meta_data/10x_cell_barcode_whitelists/bm_tap_10x_bc_whitelist_737k_201608.txt.gz"
+  WholeTotalBM: "meta_data/10x_cell_barcode_whitelists/10x_bc_whitelist_737k_201608.txt"
+  WholeKitBM: "meta_data/10x_cell_barcode_whitelists/10x_bc_whitelist_737k_201608.txt"
+  wtxmmix: "meta_data/10x_cell_barcode_whitelists/10x_bc_whitelist_737k_201608.txt"
+  wtxlung: "meta_data/10x_cell_barcode_whitelists/10x_bc_whitelist_737k_201608.txt"
+  tapmix: "meta_data/10x_cell_barcode_whitelists/10x_bc_whitelist_737k_201608.txt"
+  taplung: "meta_data/10x_cell_barcode_whitelists/10x_bc_whitelist_737k_201608.txt"
+  19s005246: "meta_data/10x_cell_barcode_whitelists/10x_bc_whitelist_737k_201608.txt"
+  taphumanmix: "meta_data/10x_cell_barcode_whitelists/10x_bc_whitelist_737k_201608.txt"
+  perturbchr8v2: "meta_data/10x_cell_barcode_whitelists/10x_bc_whitelist_737k_201608.txt"
+  perturbchr8alt1: "meta_data/10x_cell_barcode_whitelists/10x_bc_whitelist_737k_201608.txt"
+  perturbchr8alt2: "meta_data/10x_cell_barcode_whitelists/10x_bc_whitelist_737k_201608.txt"
+  perturbL1000: "meta_data/10x_cell_barcode_whitelists/10x_bc_whitelist_737k_201608.txt"
+  perturbL1000a: "meta_data/10x_cell_barcode_whitelists/10x_bc_whitelist_737k_201608.txt"
+  perturbL1000b: "meta_data/10x_cell_barcode_whitelists/10x_bc_whitelist_737k_201608.txt"
+  perturb10xWTX: "meta_data/10x_cell_barcode_whitelists/10x_bc_whitelist_737k_201608.txt"
+  tapk562deep: "meta_data/10x_cell_barcode_whitelists/10x_bc_whitelist_737k_201608.txt"
+  wtxk562deep: "meta_data/10x_cell_barcode_whitelists/10x_bc_whitelist_737k_201608.txt"
+
 # number of minimum molecules per CROP-seq vector to define a cell perturbed for a given vector
 perturbation_status:
   min_txs:
@@ -162,6 +225,7 @@ validation:   [11iv210ng, 11iv22ng, 8iv210ng, 8iv22ng, Sample10X]
 screen:       [8iScreen1, 11iScreen1]
 tap_vs_whole: [WholeTx, TAP1, TAP2]
 drop-seq:     [W4ea, T4ea]
+bone_marrow:  [TAPtotalBM, TAPkitBM, WholeTotalBM, WholeKitBM]
 mouse_mix:    [wtxmmix, wtxlung, tapmix, taplung]
 human_mix:    [19s005246, taphumanmix]
 chr8_reps:    [perturbchr8v2, perturbchr8alt1, perturbchr8alt2]
@@ -186,10 +250,12 @@ create_tapseq_ref:
     hg38_tapseq_ref_validation_v2: meta_data/target_gene_panels/target_genes_validation_v2.gtf
     hg38_tapseq_ref_validation_v3: meta_data/target_gene_panels/target_genes_validation.gtf
     hg38_tapseq_ref_dropseq: meta_data/target_gene_panels/target_genes_validation.gtf
+    mm10_tapseq_ref_bone_marrow:  meta_data/target_gene_panels/target_genes_bone_marrow.gtf
     hg38_tapseq_ref_rev: meta_data/target_gene_panels/target_genes_chr8_rev.gtf
     mm10_tapseq_ref_mix: meta_data/target_gene_panels/target_genes_mouse_mix.gtf
     hg38_tapseq_ref_mix: meta_data/target_gene_panels/target_genes_chr8_rev.gtf
     hg38_tapseq_ref_l1000: meta_data/target_gene_panels/target_genes_L1000.gtf.gz
+    hg38_tapseq_ref_chr11_noPert: meta_data/target_gene_panels/target_genes_chr11_rev.gtf
   BSgenome_id: 
     hg38: BSgenome.Hsapiens.UCSC.hg38
     mm10: BSgenome.Mmusculus.UCSC.mm10
@@ -279,6 +345,8 @@ downsample:
     perturbL1000a: [1000, 2500, 5000, 7500, 7800]
     perturbL1000b: [1000, 2500, 5000, 7500, 7800]
     perturb10xWTX: [1000, 2500, 5000, 7500, 7800]
+    tapk562deep: [1000, 1500, 3500, 5000, 10000, 15000, 20000, 40000, 80000, 160000, 200000, 300000]
+    wtxk562deep: [1000, 1500, 3500, 5000, 10000, 15000, 20000, 40000, 80000, 160000, 200000]
     
 collapse_perturbations:
   targets:
