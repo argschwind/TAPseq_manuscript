@@ -66,7 +66,7 @@ rule reads_on_target:
     vector_prefix = config["create_vector_ref"]["vector_prefix"]
   conda: "../envs/r_analyses.yml"
   script:
-    "../scripts/reads_on_target.R"
+    "../scripts/analyses/reads_on_target.R"
   
 # TAP-seq vs CROP-seq using downsampled dge to same sequencing depth per sample
 rule tapseq_vs_cropseq:
@@ -82,7 +82,7 @@ rule tapseq_vs_cropseq:
     "results/tapseq_vs_cropseq.html"
   conda: "../envs/r_analyses.yml"
   script:
-    "../scripts/tapseq_vs_cropseq.Rmd"
+    "../scripts/analyses/tapseq_vs_cropseq.Rmd"
   
 # downsample dge data for figure 1 plots
 rule downsample_dge_fig1:
@@ -116,7 +116,7 @@ rule screen_data_qc:
     vector_pattern = config["create_vector_ref"]["vector_prefix"]
   conda: "../envs/r_analyses.yml"
   script:
-    "../scripts/screen_data_qc.Rmd"
+    "../scripts/analyses/screen_data_qc.Rmd"
     
 # collapse perturbation status by gRNA vector targets
 rule collapse_perturbations:
@@ -128,7 +128,7 @@ rule collapse_perturbations:
   log: "data/{sample}/logs/collapse_perturbations.log"
   conda: "../envs/dropseq_tools.yml"
   shell:
-    "python scripts/collapse_perturbations.py -i {input.pert_status} -t {input.grna_targets} "
+    "python scripts/analyses/collapse_perturbations.py -i {input.pert_status} -t {input.grna_targets} "
     "-o {output} 2> {log}"
   
 # Perform differential gene expression testing to discover enhancer - gene interactions. Method can
@@ -153,7 +153,7 @@ rule diff_expr:
   threads: config["map_enhancers"]["threads"]
   conda: "../envs/r_map_enhancers.yml"
   script:
-    "../scripts/differential_expression.R"
+    "../scripts/analyses/differential_expression.R"
 
 # compare models with different covariates for differential expression testing using MAST
 rule compare_covariates:
@@ -170,7 +170,7 @@ rule compare_covariates:
     vector_pattern = config["create_vector_ref"]["vector_prefix"]
   conda: "../envs/r_map_enhancers.yml"
   script:
-    "../scripts/compare_covariates.Rmd"
+    "../scripts/analyses/compare_covariates.Rmd"
     
 # process MAST de results and calculate useful stats such as confidence levels and distance to TSS.
 # generates input files for detailed enhancer analyses
@@ -189,7 +189,7 @@ rule process_de_results:
     confidence_fdr = 0.05  # fdr threshold for single gRNA hits used to assign confidence levels
   conda: "../envs/r_map_enhancers.yml"
   script:
-    "../scripts/process_de_results.R"
+    "../scripts/analyses/process_de_results.R"
   
 # perform basic analyses of MAST differential expression results to identify cis enhancer - target
 # gene interactions
@@ -209,7 +209,7 @@ rule map_enhancers:
     vector_pattern = config["create_vector_ref"]["vector_prefix"]
   conda: "../envs/r_map_enhancers.yml"
   script:
-    "../scripts/map_enhancers.Rmd"
+    "../scripts/analyses/map_enhancers.Rmd"
   
 # download chromatin data
 rule download_chromatin_data:
@@ -258,7 +258,7 @@ rule chromatin_analyses:
     "results/chromatin_analyses_screen.html"
   conda: "../envs/r_map_enhancers.yml"
   script:
-    "../scripts/chromatin_analyses_screen.Rmd"
+    "../scripts/analyses/chromatin_analyses_screen.Rmd"
     
 # perform hi-c analysis
 rule hic_analysis:
@@ -272,7 +272,7 @@ rule hic_analysis:
     "results/hic_analysis.html"
   conda: "../envs/r_map_enhancers.yml"
   script:
-    "../scripts/hic_analysis.Rmd"
+    "../scripts/analyses/hic_analysis.Rmd"
 
 # perform activity by contact analysis
 rule abc_analysis:
@@ -288,4 +288,4 @@ rule abc_analysis:
     "results/abc_analysis.html"
   conda: "../envs/r_map_enhancers.yml"
   script:
-    "../scripts/abc_analysis_screen.Rmd"
+    "../scripts/analyses/abc_analysis_screen.Rmd"
