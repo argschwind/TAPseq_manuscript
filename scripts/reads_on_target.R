@@ -1,4 +1,4 @@
-# simple script to count the number of total reads and reads on target for chr8 and chr11 crop-seq
+# simple script to count the number of total reads and reads on target for chr8 and chr11 CROP-seq
 # validation samples. this script contains a lot of hard-coded things like panel and screen
 # identifiers and sample naming patterns, so be careful when changing upstream data!
 
@@ -29,9 +29,9 @@ chr8_genes <- target_genes %>%
   c(known_enh)
 
 # string patterns for all target genes (incl CROP-seq vectors)
-vector_annot <- snakemake@params$vector_annot
-targets_chr11 <- c(chr11_genes, vector_annot)
-targets_chr8 <- c(chr8_genes, vector_annot)
+vector_prefix <- snakemake@params$vector_prefix
+targets_chr11 <- c(chr11_genes, vector_prefix)
+targets_chr8 <- c(chr8_genes, vector_prefix)
 
 # total number of reads ----------------------------------------------------------------------------
 
@@ -55,19 +55,21 @@ raw_reads <- data.frame(sample = names(raw_reads), total_reads = raw_reads,
 # reads on target ----------------------------------------------------------------------------------
 
 # function to count reads on target genes
-reads_on_target <- function(bam_files, targets) {
+reads_on_target <- function(bam_files, targets, bam_tag = "GE:Z:") {
   
-  # write target genes into text file for grep
-  write(targets, file = "./targets.txt")
+  # add bam tag to target genes to create patterns for grep and write to text file
+  targets_patterns <- paste0(bam_tag, targets)
+  targets_file <- tempfile(pattern = "target_patterns_", fileext = ".txt")
+  write(targets_patterns, file = targets_file)
   
   # count reads on targets
-  target_reads <- sapply(bam_files, FUN = function(x) {
-    command <- paste("samtools view", x, "| fgrep -f", "./targets.txt", "| wc -l")
+  target_reads <- vapply(bam_files, FUN = function(x) {
+    command <- paste("samtools view", x, "| fgrep -f", targets_file, "| wc -l")
     as.numeric(system(command, intern = TRUE))
-  })
+  }, FUN.VALUE = numeric(1))
   
   # delete target genes tempfile
-  unlink("./targets.txt")
+  unlink(targets_file)
   
   # create final output
   data.frame(sample = names(bam_files), target_reads = target_reads, stringsAsFactors = FALSE)
