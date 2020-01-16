@@ -53,6 +53,25 @@ rule downsample:
     "python scripts/processing/extract_dge.py -i {input.umi_obs} {params.whitelist_arg}"
     "-o {output.dge} --sample {params.reads} --seed {params.seed} "
     "--tpt_threshold {params.tpt_threshold} 2> {log}"
+    
+# downsample umi observations to a given number of genic reads and extract dge. sampling can either
+# be 'avg' for an average number of reads per cell, or 'fixed' for a fixed number of reads per cell.
+# panel can be set to 'onGenes' or 'onTarget', specifying whether downsampling should be performed
+# on reads mapping to any genes or only on reads mapping to target genes.
+rule advanced_downsample:
+  input:
+    umi_obs = "data/{sample}/umi_observations.txt",
+    target_genes = lambda wildcards:
+      config["advanced_dge_downsampling"]["target_genes"][wildcards.sample],
+    whitelist = lambda wildcards: config["10x_cbc_whitelist"][wildcards.sample]
+  output:
+    "data/{sample}/downsampled/dge_{reads}_{sampling}_reads_per_cell_{panel}.txt"
+  params:
+    tpt_threshold = config["extract_dge"]["tpt_threshold"],
+    seed = 20190513
+  conda: "../envs/r_analyses.yml"
+  script:
+    "../scripts/analyses/advanced_dge_downsampling.R"
   
 # calculate reads on target genes enrichment for TAP-seq vs CROP-seq comparison
 rule reads_on_target:
@@ -61,7 +80,7 @@ rule reads_on_target:
     fastq = [fastq_read2(sample) for sample in config["validation"]],
     target_genes = "meta_data/target_gene_panels/target_genes_validation.csv"
   output:
-    "data/reads_on_target.csv"
+    "data/reads_on_target_validation_samples.csv"
   params:
     vector_prefix = config["create_vector_ref"]["vector_prefix"]
   conda: "../envs/r_analyses.yml"
@@ -71,7 +90,7 @@ rule reads_on_target:
 # TAP-seq vs CROP-seq using downsampled dge to same sequencing depth per sample
 rule tapseq_vs_cropseq:
   input:
-    reads_on_target = "data/reads_on_target.csv",
+    reads_on_target = "data/reads_on_target_validation_samples.csv",
     target_genes = "meta_data/target_gene_panels/target_genes_validation.csv",
     dge = [expand("data/{sample}/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
              sample = "Sample10X", rpc = config["downsample"]["reads_per_cell"]["Sample10X"]),
@@ -79,13 +98,13 @@ rule tapseq_vs_cropseq:
              sample = ["11iv210ng", "11iv22ng", "8iv210ng", "8iv22ng"],
              rpc = config["downsample"]["reads_per_cell"]["tap-seq"])]
   output:
-    "results/tapseq_vs_cropseq.html"
+    "results/analyses/tapseq_vs_cropseq.html"
   conda: "../envs/r_analyses.yml"
   script:
     "../scripts/analyses/tapseq_vs_cropseq.Rmd"
   
-# downsample dge data for figure 1 plots
-rule downsample_dge_fig1:
+# downsample dge data for TAP-seq validation
+rule downsample_dge_validation:
   input:
     dge = [expand("data/re-wholetx/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
              rpc = config["downsample"]["reads_per_cell"]["re-wholetx"]),
@@ -98,7 +117,17 @@ rule downsample_dge_fig1:
            expand("data/T4ea/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
              rpc = config["downsample"]["reads_per_cell"]["T4ea"])]
   
-# screen experiments -------------------------------------------------------------------------------
+# generate downsampled bone marrow datasets for cell type identification analyses
+rule downsample_dge_bone_marrow:
+  input:
+    expand("data/{sample}/downsampled/dge_{reads}_avg_reads_per_cell_onGenes.txt",
+      sample = ["TAPtotalBM", "TAPkitBM"], reads = [100, 500, 1000, 1500, 2000, 2500, 5000, 5500]),
+    expand("data/{sample}/downsampled/dge_{reads}_avg_reads_per_cell_onGenes.txt",
+      sample = ["WholeTotalBM", "WholeKitBM"],
+      reads = [100, 500, 1000, 1500, 2000, 2500, 5000, 5500, 10000, 20000, 30000]),
+    "data/WholeTotalBM/downsampled/dge_50000_avg_reads_per_cell_onGenes.txt"
+  
+# enhancer screen experiments ----------------------------------------------------------------------
 
 # QC of screen data (dge data and detected perturbations)
 rule screen_data_qc:
@@ -111,7 +140,7 @@ rule screen_data_qc:
     exp_data = "meta_data/screen_experimental_info.csv",
     vctr_seqs = expand("meta_data/cropseq_vectors_{chr}_screen.fasta", chr = ["chr8", "chr11"])
   output:
-    "results/screen_data_qc.html"
+    "results/analyses/screen_data_qc.html"
   params:
     vector_pattern = config["create_vector_ref"]["vector_prefix"]
   conda: "../envs/r_analyses.yml"
@@ -165,7 +194,7 @@ rule compare_covariates:
     annot = ["meta_data/target_gene_panels/target_genes_chr8_screen.gtf",
       "meta_data/target_gene_panels/target_genes_chr11_screen.gtf"]
   output:
-    "results/compare_covariates.html"
+    "results/analyses/compare_covariates.html"
   params:
     vector_pattern = config["create_vector_ref"]["vector_prefix"]
   conda: "../envs/r_map_enhancers.yml"
@@ -204,7 +233,7 @@ rule map_enhancers:
       sample = config["screen"]),
     vector_targets = expand("meta_data/vector_targets_{chr}_screen.csv", chr = ["chr8", "chr11"])
   output:
-    "results/map_enhancers.html"
+    "results/analyses/map_enhancers.html"
   params:
     vector_pattern = config["create_vector_ref"]["vector_prefix"]
   conda: "../envs/r_map_enhancers.yml"
@@ -236,7 +265,7 @@ rule download_encode_bam:
 rule download_hic_data:
   output:
     expand("data/k562_chromatin_data/HiC/5kb_resolution_intrachromosomal/{chr}/MAPQG0/{chr}_{file}",
-      chr = ["chr" + str(i)  for i in [*range(1,23), "X"]],
+      chr = ["chr" + str(i)  for i in [*range(1, 23), "X"]],
       file = ["5kb.RAWobserved", "5kb.KRnorm"])
   params:
     url = config["chromatin_analyses"]["rao_hic"]
@@ -255,7 +284,7 @@ rule chromatin_analyses:
     encode_chip = expand("data/k562_chromatin_data/{assay}_encode_chipseq_fcOverCtrl.bigWig",
       assay = config["chromatin_analyses"]["encode_chip"])
   output:
-    "results/chromatin_analyses_screen.html"
+    "results/analyses/chromatin_analyses_screen.html"
   conda: "../envs/r_map_enhancers.yml"
   script:
     "../scripts/analyses/chromatin_analyses_screen.Rmd"
@@ -269,7 +298,7 @@ rule hic_analysis:
     hic_norm = expand("data/k562_chromatin_data/HiC/5kb_resolution_intrachromosomal/{chr}/MAPQG0/{chr}_5kb.KRnorm",
       chr = ["chr8", "chr11"])
   output:
-    "results/hic_analysis.html"
+    "results/analyses/hic_analysis.html"
   conda: "../envs/r_map_enhancers.yml"
   script:
     "../scripts/analyses/hic_analysis.Rmd"
@@ -277,15 +306,9 @@ rule hic_analysis:
 # perform activity by contact analysis
 rule abc_analysis:
   input:
-    processed_results = "data/diff_expr_screen_nGenesCovar.csv",
-    encode_bam = expand("data/k562_chromatin_data/{assay}_encode_rep1_alignment.bam",
-                   assay = config["chromatin_analyses"]["encode_bam"]),
-    hic_raw = expand("data/k562_chromatin_data/HiC/5kb_resolution_intrachromosomal/{chr}/MAPQG0/{chr}_5kb.RAWobserved",
-                chr = ["chr8", "chr11"]),
-    hic_norm = expand("data/k562_chromatin_data/HiC/5kb_resolution_intrachromosomal/{chr}/MAPQG0/{chr}_5kb.KRnorm",
-                 chr = ["chr8", "chr11"])
+    "data/chromatin_annotated_etps/chromatin_annotated_pairs_screen.csv"
   output:
-    "results/abc_analysis.html"
+    "results/analyses/abc_analysis.html"
   conda: "../envs/r_map_enhancers.yml"
   script:
     "../scripts/analyses/abc_analysis_screen.Rmd"

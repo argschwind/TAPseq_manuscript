@@ -8,6 +8,7 @@ include: "rules/create_alignment_refs.smk"
 include: "rules/align_reads.smk"
 include: "rules/extract_dge.smk"
 include: "rules/analyses.smk"
+include: "rules/chromatin_annotated_etps.smk"
 include: "rules/revision_analyses.smk"
 include: "rules/process_rnaseq.smk"
 
@@ -19,13 +20,13 @@ rule all:
   input:
     align = expand("results/alignment/{sample}_align_report.html", sample = config["samples"]),
     dge = expand("results/dge/{sample}_dge_report.html", sample = config["samples"]),
-    analyses = ["results/tapseq_vs_cropseq.html",
-                "results/screen_data_qc.html",
-                "results/compare_covariates.html",
-                "results/map_enhancers.html",
-                "results/chromatin_analyses_screen.html",
-                "results/hic_analysis.html",
-                "results/abc_analysis.html"]
+    analyses = ["results/analyses/tapseq_vs_cropseq.html",
+                "results/analyses/screen_data_qc.html",
+                "results/analyses/compare_covariates.html",
+                "results/analyses/map_enhancers.html",
+                "results/analyses/chromatin_analyses_screen.html",
+                "results/analyses/hic_analysis.html",
+                "results/analyses/abc_analysis.html"]
 
 # functions to run workflow only partially ---------------------------------------------------------
 
