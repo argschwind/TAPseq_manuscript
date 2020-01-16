@@ -1,0 +1,130 @@
+---
+title: "Figure 3b (Visualization of enhancer screen results)"
+author: "Schraivogel, Gschwind et al."
+date: "03/12/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = F, warning = F)
+```
+
+This vignette plots enhancer-target pairs on arbitrary regions in the genome, see figure 3b. 
+
+## Load packages
+
+```{r packages}
+.libPaths("/g/steinmetz/velten/Software/RLibs-seurat3")
+
+require(Gviz)
+require(GenomicInteractions)
+require(TxDb.Hsapiens.UCSC.hg38.knownGene)
+require(biomaRt)
+require(plyr)
+require(rtracklayer)
+```
+
+Specify the region:
+
+```{r region}
+region <- GRanges(seqnames = "chr11", ranges = IRanges(start = 5265000, end = 5300000))
+```
+
+## Load required data
+
+Differential expression testing was performed for the data from the screen, see XXXX. The results are loaded into R. Gene-wise mean expression levels are also loaded.
+
+```{r loadData}
+hypotheses <- read.csv( url("http://steinmetzlab.embl.de/TAPdata/diff_expr_screen_nGenesCovar.csv"), header=T)
+```
+
+Data from [Klann et al](https://www.ncbi.nlm.nih.gov/pubmed/28369033) for the FACS-based screen for HBE1 enhancers are also loaded. Coordinates were lifted to hg38 using liftOver.
+
+```{r loadKlann}
+charlie <- read.table( url("http://steinmetzlab.embl.de/TAPdata/hbe1_stats.txt"), header=T)
+charlie.hg38 <- readLines( url("http://steinmetzlab.embl.de/TAPdata/h38_coordinates.bed"))
+charlie <- GRanges(charlie.hg38,mcols = data.frame(pval = ifelse(-log10(charlie$padj) > 20, 20, -log10(charlie$padj))))
+```
+
+Finally, epigenome tracks are loaded from ENCODE.
+
+```{sh download, eval=F}
+wget -O data/K562.K27ac3.fC.bigWig https://www.encodeproject.org/files/ENCFF779QTH/@@download/ENCFF779QTH.bigWig
+wget -O data/K562.K4me1.fC.bigWig https://www.encodeproject.org/files/ENCFF761XBZ/@@download/ENCFF761XBZ.bigWig
+wget -O data/K562.K4me3.fC.bigWig https://www.encodeproject.org/files/ENCFF712XRE/@@download/ENCFF712XRE.bigWig
+wget -O data/k562.polr2a.bigWig https://www.encodeproject.org/files/ENCFF321FZQ/@@download/ENCFF321FZQ.bigWig
+```
+
+```{r loadENCODE}
+marks <- list(
+  k27ac = rtracklayer::import("data/K562.K27ac3.fC.bigWig", which = region), #the name is wrong obviously there is no triacetylation
+  k4me1 = rtracklayer::import("data/K562.K4me1.fC.bigWig", which = region),
+  k4me3 = rtracklayer::import("data/K562.K4me3.fC.bigWig", which = region),
+  pol2 = rtracklayer::import("data/k562.polr2a.bigWig", which = region))
+
+```
+
+## Create plot
+
+
+```{r makegvizplot, fig.width = 8, fig.height=6}
+
+allenhancers <- sprintf("chr%s:%d-%d",hypotheses$enh_chr,hypotheses$enh_start, hypotheses$enh_end)
+allenhancers <- unique(allenhancers)
+allenhancers <- allenhancers[!grepl("NA", allenhancers)]
+allenhancers <- GRanges(allenhancers)
+
+#identify transcription start sites of genes
+
+mart <- useMart(biomart='ENSEMBL_MART_ENSEMBL', dataset = "hsapiens_gene_ensembl" ,host = "uswest.ensembl.org")
+martf <- getBM(attributes = c("hgnc_symbol","transcript_start") , filters = "hgnc_symbol", values = unique(hypotheses$gene),mart=mart)
+
+gene2tss <- ddply(martf,.variables = "hgnc_symbol", summarise, transcript_start = median(transcript_start))
+rownames(gene2tss) <- gene2tss$hgnc_symbol
+hypotheses$new_gene_tss <- gene2tss[as.character(hypotheses$gene),"transcript_start"]
+
+hits <- subset(hypotheses, pval_adj_allTests < 0.1 &  manual_lfc <0 &grepl("^chr", hypotheses$perturbation) )
+
+promoters <- GRanges(paste0("chr", hits$gene_chr), ranges = IRanges(hits$new_gene_tss, hits$new_gene_tss+1), strand = hits$gene_strand, mcols = data.frame(gene = hits$gene))
+enhancers.chr <- paste0("chr",hits$enh_chr)
+enhancers.start <- hits$enh_start
+enhancers.end <- hits$enh_end
+
+enhancers <- GRanges(enhancers.chr, ranges = IRanges(enhancers.start, enhancers.end),strand = "*", mcols = data.frame(id = hits$perturbation))
+
+#Create interaction object
+
+interactions <- GenomicInteractions(enhancers, promoters, counts = as.integer(hits$pval_adj_allTests < 0.1) * (hits$grna_hits+1), numberGuides = hits$grna_hits, pval =hits$pval_adj_allTests )
+
+#Create tracks
+track.enhancers <- AnnotationTrack(allenhancers, name = "Candidate enhancers", stacking = "dense", col = NULL)
+
+track.axis <- GenomeAxisTrack()
+track.ideogram <- IdeogramTrack(genome ="hg38",chromosome = "chr11")
+track.genemodels <- UcscTrack(genome = "hg38", 
+                       chromosome = "chr11", 
+                       track = "NCBI RefSeq", 
+                       table = "refGene",
+                       from = start(region), 
+                       to = end(region), 
+                       trackType = "GeneRegionTrack", 
+                       rstarts = "exonStarts", 
+                       rends = "exonEnds", 
+                       gene ="name", 
+                       symbol = "name2", 
+                       transcript = "name", 
+                       strand = "strand",
+                       stacking= "dense", transcriptAnnotation="symbol",col=NULL,col.line="black")
+track.interactions <- InteractionTrack(interactions, name = "TASC-Seq")
+track.charlie <- DataTrack(charlie, name = "HBE1 FACS reporter\ntiling screen (Klann et al.)")
+track.k27ac <- DataTrack(marks$k27ac, type="l", name = "K27ac")
+track.k4me3 <- DataTrack(marks$k4me3, type="l", name = "K27ac")
+track.pol2 <- DataTrack(marks$pol2, type="l", name = "K27ac")
+track.k4me1 <- DataTrack(marks$k4me1, type="l", name = "K27ac")
+
+
+#Plot
+plotTracks(list(track.ideogram,track.axis,track.interactions, track.genemodels, track.enhancers, track.charlie, track.k27ac), sizes = c(1,1.1,1.3,0.6,0.5,1.5,1.5),from = start(region), to= end(region))
+
+
+```

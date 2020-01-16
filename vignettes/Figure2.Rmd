@@ -1,0 +1,495 @@
+---
+title: "Targeted Perturb-Seq sensitively detects gene expression changes (Figure 2)"
+author: "Schraivogel, Gschwind et al."
+date: "28/11/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = F, message = F)
+options(bitmapType = "cairo")
+```
+
+This vignette reproduces the analysis in Figure 2 of Schraivogel, Gschwind, et al. 
+
+## Data
+
+The following experiments were performed:
+
+* We infected dCas9-KRAB-expressing K562 cells with a pool of lentiviruses carrying 56 gRNA sequences targeting one of 10 promoters from a selected region of chromosome 8, or 4 well-described enhancers, and 30 control gRNAs (Figure 2a).
+
+* Cells were then analyzed by whole transcriptome 10x genomics, or alternatively by targeted readout. For targeting, we used a target gene panel containing the known promoter/enhancer target genes, and 60 presumably unrelated genes of similar expression level from the same region of chromosome 8.
+
+The following data is required to reproduce these analysis:
+
+```{r loadData}
+require(Matrix)
+
+#Non-downsampled targeted seq data, 1.7Mb
+TAP.nods <- readRDS(url("http://steinmetzlab.embl.de/TAPdata//TAP.nods.RDS"))
+
+#Matrix encoding perturbation identity for targeted seq experiment, 173kb
+TAP.per <-  t(readRDS(url("http://steinmetzlab.embl.de/TAPdata//TAP.per.RDS")))
+
+#Non-downsampled whole transcriptome data, 272Mb
+Whole.nods <-  readRDS(url("http://steinmetzlab.embl.de/TAPdata//Whole.nods.RDS"))
+
+#Matrix encoding perturbation identity for whole transcriptome experiment, 289kb
+Whole.per <- t(readRDS(url("http://steinmetzlab.embl.de/TAPdata//Whole.per.RDS")))
+
+```
+
+Data were downsampeld at the level of raw reads to realistically simulate a lower sequencing depth. The downsampling can be reproduced from the files provided on GEO using XXX; alternatively we provide the results:
+
+```{sh downsampled, eval = F}
+
+mkdir data
+
+#Downsampled targeted seq. data, 3.3 Mb
+wget http://steinmetzlab.embl.de/TAPdata//TAP.downsampled.zip
+unzip -j -d data/TAP.downsampled TAP.downsampled.zip
+
+#Downsampled whole transcriptome seq. data, 750 Mb
+wget http://steinmetzlab.embl.de/TAPdata//WholeTx.downsampled.zip
+unzip -j -d data/WholeTx.downsampled WholeTx.downsampled.zip
+```
+
+Finally, data is re-sampled several times and differential expression testing is run. These results are expected to be available prior to running the remainder of this vignette; they can either be downloaded, or computed on a compute cluster with SLURM as job scheduler. Please run either option from the script below before running this vignette for the first time. This code will not be run automatically.
+
+```{sh runDownsampledDE, eval =F}
+# Option 1: Download our results (Xxx Gb)
+mkdir runs
+
+wget http://steinmetzlab.embl.de/TAPdata//002_DESampled_MAST.cov.wholegenome.zip
+unzip -j -d runs/MAST.cov.wholegenome 002_DESampled_MAST.cov.wholegenome.zip
+rm 002_DESampled_MAST.cov.wholegenome.zip
+
+wget http://steinmetzlab.embl.de/TAPdata//002_DESampled_MAST.cov.targeted.zip
+unzip -j -d runs/MAST.cov.targeted 002_DESampled_MAST.cov.targeted.zip
+rm 002_DESampled_MAST.cov.targeted.zip
+
+# Option 2: Compute results
+#Please check the first lines of the following script to make sure all required R packages are available: functions/script_runDownsamplingTest.R
+
+mkdir runs
+
+#The following code submits all necessary jobs to slurm. Compute time is approximately 36h.
+tempdir=/tmpdata/slurmapply
+modules="module load R-bundle-Bioconductor-GBCS/3.7-foss-2017b-R-3.5.1" #Any code that slurm nodes need to run in order to have R available.
+
+Rscript functions/scripts_DownsamplingWrapper.R $tempdir $modules
+
+```
+
+
+## Compute environment
+
+We performed compute-expensive operations on a compute cluster with SLURM as job scheduler. In this script, there are three options:
+
+```{r setupCompute, message=F,warning=F}
+download <- T #simply download computation results; do not run compute-expensive tasks
+slurm <- T # if download is set to F, use slurm as a job scheduler
+slurm_tempdir <- "/scratch/velten/slurmapply" # a directory for data transferred between this R session and slurm jobs
+slurm_modulecommand <- "module load R-bundle-Bioconductor-GBCS/3.7-foss-2017b-R-3.5.1"  #any code that each slurm node needs to run in order to be able to call the correct version of R
+ncores <- 1 #if both slurm and download are set to F, perform computations locally with this many cores.
+
+
+source("functions/slurmapply.R") #function for calling slurm from R. See below for usage.
+
+if (!slurm ) slurmlapply <- function(X, FUN, ..., s.walltime = "1:00:00", s.memory = NULL, s.ncores = 1, s.tmpdir = "/scratch/velten/slurmapply", s.collect = TRUE, s.pckgs = getAttachedPackages(), s.module ="") {
+  mclapply(X, FUN, ..., mc.cores = ncores)
+} 
+
+```
+
+Load required packages and functions.
+
+```{r setupPackages, message=F, warning=F}
+.libPaths("/g/steinmetz/velten/Software/RLibs-seurat3/")
+require(Seurat)
+require(MAST)
+require(parallel)
+require(reshape2)
+require(plyr)
+require(scales)
+require(venneuler)
+require(ROCR)
+require(ggplot2)
+```
+
+## Simple differential expression test, no downsampling (Figure 2d,e)
+
+Extract some metadata information:
+
+```{r parseMetaData}
+scramble.cols <- grep("non-targeting",colnames(TAP.per))
+is.scramble <- apply(TAP.per[,scramble.cols],1,function(x) any(x > 0)) & apply(TAP.per[,-scramble.cols],1,function(x) all(x == 0)) # <<- CHECK!
+TAP.nods <- TAP.nods[!grepl("CROPseq",rownames(TAP.nods)),]
+cell.per.per <- apply(TAP.per,2,sum)
+useper <- colnames(TAP.per)[!grepl("non-target", colnames(TAP.per))]
+
+targetgenes <- unique(gsub("[_-].+","",colnames(TAP.per)))
+targetgenes[targetgenes == "HS2"] <- "HBE1"
+class <- targetgenes %in% c("ZFPM2","HBE1","GATA1","MYC")
+ngenes <- apply(TAP.nods >0 , 2, sum)
+
+```
+
+Run differential expression tests, targeted seq.:
+
+```{r diffExTAP}
+
+source("functions/function_DEtest_basic.R")
+
+if (download) {
+  noDownsampling <- readRDS(url("http://steinmetzlab.embl.de/TAPdata//Figure2_DE_TAP.RDS")) 
+  }else {
+noDownsampling <- slurmlapply(useper, runSeuratTest, DGE= TAP.nods,pert = TAP.per, covariate = ngenes, scrcols= scramble.cols, normfun = function(x) sum(x[x < quantile(x, probs = 0.9)]) + 1, s.walltime = "00:30:00", s.tmpdir = slurm_tempdir, s.module = slurm_modulecommand)
+  noDownsampling <- do.call(rbind, noDownsampling)
+}
+```
+
+Extract metadata information for Whole Tx and run differential expression tests. This is initially done for the target genes only.
+
+```{r diffExWhole}
+scramble.cols <- grep("non-targeting",colnames(Whole.per))
+is.scramble <- apply(Whole.per[,scramble.cols],1,function(x) any(x > 0)) & apply(Whole.per[,-scramble.cols],1,function(x) all(x == 0))
+Whole.nods.targetgenes <- Whole.nods[rownames(TAP.nods),]
+Whole.nods <- Whole.nods[!grepl("CROP",rownames(Whole.nods)),]
+useper <- colnames(Whole.per)[!grepl("non-target", colnames(Whole.per))]
+  ngenes <- apply(Whole.nods >0 , 2, sum)
+
+if (download) {
+    noDownsampling.Whole.Targetgenes <- readRDS(url("http://steinmetzlab.embl.de/TAPdata//Figure2_DE_WholeTargets.RDS")) 
+} else {
+  
+
+noDownsampling.Whole.Targetgenes.Jobs <- slurmlapply(useper, runSeuratTest, DGE= Whole.nods.targetgenes,pert = Whole.per, covariate = ngenes, scrcols= scramble.cols, normfun = function(x) sum(x[x < quantile(x, probs = 0.9)]) + 1, s.walltime = "5:00:00", s.collect = F, s.tmpdir = slurm_tempdir, s.module = slurm_modulecommand)
+
+#noDownsampling.Whole <- do.call(slurmcollect, noDownsampling.Whole.Jobs)
+#noDownsampling.Whole <- do.call(rbind, noDownsampling.Whole)
+
+noDownsampling.Whole.Targetgenes <- do.call(slurmcollect, noDownsampling.Whole.Targetgenes.Jobs)
+noDownsampling.Whole.Targetgenes <- do.call(rbind, noDownsampling.Whole.Targetgenes)
+}
+
+```
+
+After harmonizing the output and parsing some information (not shown, see raw Vignette code), we plot figure 2d:
+
+```{r harmoinize, echo = F}
+
+genes <- rownames(TAP.nods)
+fixme <- function(x) {
+notused <- genes[!genes%in% as.character(x$gene) ]
+data.frame(guide = unique(x$guide),
+gene = c(as.character(x$gene), notused),
+p_val = c(x$p_val, rep(1, length(notused))),
+avg_logFC = c(x$avg_logFC, rep(0, length(notused))),
+p_val_adj = c(x$p_val_adj, rep(1, length(notused)))
+)
+}
+
+#illustrate the effect that the guides have using the bootstrap
+guidlabels <- gsub("([^_]+)_.+","p\\1", noDownsampling$guide)
+guidlabels <- gsub("([^-]+)-.+","e\\1",guidlabels)
+
+noDownsampling$guidlabels <- gsub("([^_]+)_.+","p\\1", noDownsampling$guide)
+noDownsampling$guidlabels <- gsub("([^-]+)-.+","e\\1",noDownsampling$guidlabels)
+
+noDownsampling$target <- gsub("([^_-]+).+","\\1",noDownsampling$guide)
+noDownsampling$target[noDownsampling$target=="HS2"] <- "HBE1"
+
+
+
+noDownsampling.Whole.Targetgenes$target <- gsub("([^_-]+).+","\\1",noDownsampling.Whole.Targetgenes$guide)
+noDownsampling.Whole.Targetgenes$target[noDownsampling.Whole.Targetgenes$target=="HS2"] <- "HBE1"
+
+noDownsampling.Whole.Targetgenes$guidlabels <- gsub("([^_]+)_.+","p\\1", noDownsampling.Whole.Targetgenes$guide)
+noDownsampling.Whole.Targetgenes$guidlabels <- gsub("([^-]+)-.+","e\\1",noDownsampling.Whole.Targetgenes$guidlabels)
+
+noDownsampling$class <- ifelse(grepl("^e", noDownsampling$guidlabels),"Enhancer","Promoter")
+noDownsampling$guide <- factor(noDownsampling$guide)
+
+noDownsampling.Whole.Targetgenes$class <- ifelse(grepl("^e", noDownsampling.Whole.Targetgenes$guidlabels),"Enhancer","Promoter")
+noDownsampling.Whole.Targetgenes$guide <- factor(noDownsampling.Whole.Targetgenes$guide)
+
+breaks <- levels(noDownsampling$guide)
+uselabels <- gsub("([^_]+)_.+","p\\1", breaks)
+uselabels <- gsub("([^-]+)-.+","e\\1",uselabels)
+uselabels[!1:56 %in% seq(2,56,by=4)] <- ""
+
+noDownsampling.Whole.Targetgenes$assay <- "Whole Tx"
+noDownsampling$assay <- "TASC-Seq"
+noDownsampling.m <- rbind(noDownsampling, noDownsampling.Whole.Targetgenes[, intersect(colnames(noDownsampling), colnames(noDownsampling.Whole.Targetgenes))])
+
+noDownsampling.m$assay <- factor(noDownsampling.m$assay, levels = c("Whole Tx","TASC-Seq"))
+```
+
+```{r Figure2d, fig.width=6,fig.height=4}
+ggplot(aes(x = guide , y = -log10(p_val_adj), color = paste0(assay,target == gene)), data=subset(noDownsampling.m, target!= gene)) + 
+  geom_point(position = position_jitter(0.25,0.1), size=0.3) +geom_point(data=subset(noDownsampling.m, target==gene), size = 0.75) + 
+  scale_y_continuous(limits=c(0,10), breaks = seq(0,10,by=5), labels = c(seq(0,5,by=5),">10"),oob=scales::squish) + theme_bw() +
+  ylab("-log10 FDR") + xlab("Target / gRNA") + scale_color_manual(values = c("TASC-SeqFALSE" = "#555555", "TASC-SeqTRUE" = "#ff0018" ,"Whole TxFALSE" = "#555555", "Whole TxTRUE" = "#0012f9"),name="", labels = c("FALSE" = "Off-target", "TRUE" = "Intended hit"), guide=F) +
+  theme( panel.grid = element_blank(), axis.text.x = element_text(angle=90, hjust=1), legend.position = "bottom", strip.background = element_rect(fill=NA,colour=NA) ) + facet_grid(assay~class, scales="free_x", space= "free_x") + scale_x_discrete(breaks = breaks, labels = uselabels) + geom_vline(xintercept = seq(4.5,56,by=4), color = "grey", linetype =2) + geom_hline(yintercept = 1, linetype=3)
+
+```
+
+Plot figure 2e (Venn diagram):
+
+```{r Figure2e, fig.width=6,fig.height=4}
+#a venn diagram
+noDownsampling$interaction <- paste(noDownsampling$guide, noDownsampling$gene)
+noDownsampling.Whole.Targetgenes$interaction <- paste(noDownsampling.Whole.Targetgenes$guide, noDownsampling.Whole.Targetgenes$gene)
+
+TAP.hits <- subset(noDownsampling, p_val_adj < 0.1)
+Whole.hits <- subset(noDownsampling.Whole.Targetgenes, p_val_adj <.1)
+
+TAP.hits.ontarget <- subset(TAP.hits, gene == target)
+Whole.hits.ontarget <- subset(Whole.hits, gene == target)
+
+TAP.hits.offtarget <- subset(TAP.hits, gene != target)
+Whole.hits.offtarget <- subset(Whole.hits, gene != target)
+
+vennvector <- c("Whole&TAP&OnTarget" = length(intersect(TAP.hits.ontarget$interaction, Whole.hits.ontarget$interaction)),
+                "Whole&TAP" = 0)#length(intersect(TAP.hits.offtarget$interaction, Whole.hits.offtarget$interaction)))
+vennvector <- c(vennvector, "Whole&OnTarget" = nrow(Whole.hits.ontarget) - unname(vennvector["Whole&TAP&OnTarget"]))
+vennvector <- c(vennvector, "TAP&OnTarget" = nrow(TAP.hits.ontarget) - unname(vennvector["Whole&TAP&OnTarget"]))
+vennvector <- c(vennvector, "TAP" = 0)#nrow(TAP.hits.offtarget) - unname(vennvector["Whole&TAP"]))
+vennvector <- c(vennvector, "Whole" = 0)#nrow(Whole.hits.offtarget) - unname(vennvector["Whole&TAP"]))
+vennvector <- c(vennvector, "OnTarget" = length(unique(noDownsampling$guide)) - unname(vennvector["Whole&TAP&OnTarget"]) - unname(vennvector["Whole&OnTarget"]) - unname(vennvector["TAP&OnTarget"]))
+vennplot <- venneuler(vennvector)
+plot(vennplot)
+```
+
+## Analysis of downsampling experiment by Precision-Recall Curves (Figure 2f,g)
+
+Load results of differential expression testing following downsampling of cells and reads. See above for how these results are obtained. Then compute Precision-Recall curves.
+
+```{R loaddownsampling,  results='hide' }
+
+#now load the output from the big sampling experiment. 
+downsampled.tap.files <- list.files("runs/MAST.cov.targeted/",pattern = "TAP", full.names = T)
+downsampled.tap <- lapply(downsampled.tap.files, readRDS)
+downsampled.tap <- do.call(rbind, downsampled.tap)
+
+downsampled.whole.files <- list.files("runs/MAST.cov.targeted/",pattern = "Whole", full.names = T)
+downsampled.whole <- lapply(downsampled.whole.files, readRDS)
+downsampled.whole <- do.call(rbind, downsampled.whole)
+
+downsampled.wholegenome.files <- list.files("runs/MAST.cov.wholegenome/",pattern = "Whole", full.names = T)
+downsampled.wholegenome <- lapply(downsampled.wholegenome.files, readRDS)
+downsampled.wholegenome <- do.call(rbind, downsampled.wholegenome)
+
+downsampled.tap$assay <- "TAP"
+downsampled.whole$assay <- "WholeTx"
+downsampled.wholegenome$assay <- "WholeGenome"
+
+out <- rbind(downsampled.tap, downsampled.whole,downsampled.wholegenome )
+
+
+out$target <- gsub("[-_].+","", out$guide)
+out$target <- gsub("HS2","HBE1",out$target)
+
+out$tp <- out$target == out$gene
+
+
+getarea <- function(x, y) {
+  dx <- x[-1] - x[-length(x)]
+  ymean <- (y[-1] + y[-length(y)]) /2
+  sum(dx * ymean, na.rm=T)
+}
+
+auprc.value <- ddply(out,  c("ncells","assay","reads"), function(x) {
+  pred <- prediction(-log10(x$p_val), x$tp)
+  auc <- performance(pred, "sens","prec")
+  
+  data.frame(auc = getarea(auc@y.values[[1]], auc@x.values[[1]]))
+}, .progress = "text")
+
+auprc <- ddply(out,  c("ncells","assay","reads"), function(x) {
+  pred <- prediction(-log10(x$p_val), x$tp)
+  auc <- performance(pred, "sens","prec")
+  
+  data.frame(prec = auc@x.values[[1]], sens = auc@y.values[[1]])
+},.progress = "text")
+
+```
+
+Figure 2f: Sample curves
+
+```{R figure2f, fig.width=8, fig.height=3}
+
+toplot<-subset(auprc, ncells %in% c(10,50,150) &  reads %in% c(250,2500,10000) ) 
+toplot<-toplot[sample(1:nrow(toplot), 1000000),]
+
+qplot(x = sens, y = prec , color = assay,group = paste(ncells, assay), alpha =ncells, geom="line",data=toplot)  + facet_wrap(~factor(paste(reads,"reads/cell"), levels = paste(c(250,2500,10000),"reads/cell") )) + theme_bw()  + ylab ("Precision") + xlab("Recall") + scale_color_manual(name ="Method",values = c("TAP"= "#ff0018","WholeTx" = "#0012f9", "WholeGenome" = "#555555"), guide=F)  + scale_x_continuous(breaks = seq(0,1,by=0.25), labels = c("0","0.25","0.5","0.75","1")) + theme(panel.grid = element_blank(), strip.background = element_blank(), strip.text = element_text(face="bold.italic"), panel.border = element_rect(fill=NA,size=1)) + scale_alpha_continuous(limits=c(10,150),range=c(0.25,1), guide=F)
+
+```
+
+Figure 2g, left panel: Areas under the precision recall curves
+
+```{R figure2g, fig.width=4,fig.height=3 }
+
+mx <- rev(1:15); names(mx) <- as.character(10*1:15)
+qplot(x = reads * ncells, y = auc , color =assay ,group = paste(ncells, assay), alpha =ncells, geom="line",data=auprc.value)+ ylab ("AUPRC") + xlab("Total reads / perturbation") + theme_bw()  + theme(legend.position = "bottom") + scale_x_log10()+  scale_color_manual(name ="Method",values = c("TAP"= "#ff0018","WholeTx" = "#0012f9", "WholeGenome" = "#555555"), guide=F) +  theme(panel.grid = element_blank(), panel.border = element_rect(fill=NA, size=1)) + scale_alpha_continuous(range = c(0.25,1),guide=F)
+
+```
+
+Figure 2g, Right panel: Fold difference in required read depth for a given AUPRC.
+
+```{R figure2gright, fig.width=4,fig.height=3 }
+roc.value <- auprc.value
+roc.value$totalreads <- roc.value$reads * roc.value$ncells
+fit.tap <- loess(auc ~ log10(totalreads), data= subset(roc.value,  assay == "TAP"))
+fit.whole <- loess(auc ~ log10(totalreads), data= subset(roc.value,  assay == "WholeTx"))
+range <- 10^seq(3,6.5,by=0.001)
+lookup <- data.frame(reads = range,
+                     sens.tap = predict(fit.tap, newdata = data.frame(totalreads = range)),
+                     sens.whole = predict(fit.whole, newdata = data.frame(totalreads = range)))
+lrange <- seq(0.1,0.7,by =0.001)
+cost <-data.frame(sens = lrange,
+                  reads.tap = sapply(lrange, function(x) if (min(abs(lookup$sens.tap - x),na.rm = T) < 0.002) lookup$reads[which.min(abs(lookup$sens.tap - x))] else NA),
+                  reads.whole = sapply(lrange, function(x) if (min(abs(lookup$sens.whole - x),na.rm = T) < 0.002)  lookup$reads[which.min(abs(lookup$sens.whole - x))] else NA))
+cost$savings <- cost$reads.whole / cost$reads.tap
+
+
+
+qplot(x  = sens, y = savings, data= cost, geom="line") + xlab("AUPRC\n") + ylab("Fold cost reduction") + theme_bw() + scale_y_continuous(limits=c(0,50)) + theme(panel.grid = element_blank(),panel.border = element_rect(fill=NA, size=1))
+```
+
+## Analysis of downsampling experiment by Molecular Sensitivity (Figure 2f,g)
+
+For these analyses, we first compute the expression difference between perturbed and non-perturbed cells based on non-downsampled data.
+
+```{r molsens.downsamples}
+guide2target <- gsub("[-_].+","", useper)
+guide2target <- gsub("HS2","HBE1",guide2target)
+names(guide2target) <- useper
+
+
+scramble.cols <- grep("non-targeting",colnames(Whole.per))
+is.scramble <- apply(Whole.per[,scramble.cols],1,function(x) any(x > 0)) & apply(Whole.per[,-scramble.cols],1,function(x) all(x == 0))
+useper <- colnames(Whole.per)[!grepl("non-target", colnames(Whole.per))]
+
+downsampled <- rbind(downsampled.tap, downsampled.whole)
+
+#to look at absolute difference, replace / by -
+expdiff <- lapply(unique(guide2target), function(x) {
+  y <- ifelse(any(grepl(x, names(guide2target))), x,"HS2")
+  guide = as.character(unique(names(guide2target)[grepl(y, names(guide2target))]))
+  r <- lapply(guide, function(g) mean(unlist(Whole.nods[x,Whole.per[,g]==1])) - mean(unlist(Whole.nods[x,is.scramble])))
+  names(r) <- guide
+  r
+})
+names(expdiff) <- unique(guide2target)
+
+expdiff.rel <- lapply(unique(guide2target), function(x) {
+  y <- ifelse(any(grepl(x, names(guide2target))), x,"HS2")
+  guide = as.character(unique(names(guide2target)[grepl(y, names(guide2target))]))
+  r <- lapply(guide, function(g) mean(unlist(Whole.nods[x,Whole.per[,g]==1])) / mean(unlist(Whole.nods[x,is.scramble])))
+  names(r) <- guide
+  r
+})
+names(expdiff.rel) <- unique(guide2target)
+```
+
+Then, we create data tables containing, for each guide RNA-target pair, information on the absolute and relative expression difference elicited by the gRNA across all cells. All data tables also contain the probability of identifying said expression difference in downsampled data.
+
+These data tables are used to fit logistic regression. From the logistic regression fit, the molecular sensitivity is computed as the expression difference at which the probability of detection is 50%.
+
+```{r glms, results='hide' }
+modelfs.complete <- ddply(downsampled, c("test",  "ncells", "norm", "reads", "assay"), function(y) {
+    x <- ddply(y, "guide", summarise, hits = paste(gene[p_val_adj < 0.1], collapse = ";"))
+  t <- gsub("[-_].+","", x$guide)
+  outs <- strsplit(as.character(x$hits), split = ";")
+  modelf <- do.call(rbind,mapply(function(target, result, g) {
+    if (target == "HS2") {
+      target <- c("HBE1")
+      ed <- sapply(target, function(tt) expdiff[[tt]][[g]])
+      edr <-sapply(target, function(tt) expdiff.rel[[tt]][[g]])
+
+    } else {
+      ed <- expdiff[[target]][[g]]
+      edr <- expdiff.rel[[target]][[g]]
+    }
+
+    data.frame(expr =log10(abs(ed)), expr.rel = abs(log2(edr)), hit = target %in% result, target=target, guide =g)
+  }, t, outs, as.character(x$guide) ,SIMPLIFY = F))
+
+}, .progress = "text")
+
+modelfs <-   ddply(modelfs.complete, c("test",  "ncells", "norm","guide","target", "reads","assay"),summarise, hit = mean(hit), expr = mean(expr), expr.rel =mean(expr.rel))
+
+glmodels <- ddply(modelfs.complete, c("test",  "ncells", "norm", "reads","assay"), function(modelf) {
+  model <- glm(hit ~ expr, data=modelf, family = "binomial")
+  data.frame(x = seq(min(modelf$expr), max(modelf$expr), length.out = 200),
+             y = predict(model, type="response", newdata= data.frame(expr = seq(min(modelf$expr), max(modelf$expr), length.out = 200))),
+             test = unique(modelf$test), ncells = unique(modelf$ncells), norm = unique(modelf$norm))
+}, .progress = "text")
+
+glmodels.rel <- ddply(subset(modelfs.complete, !is.infinite(expr.rel)), c("test",  "ncells", "norm", "reads","assay"), function(modelf) {
+  model <- glm(hit ~ abs(log2(expr.rel)), data=modelf, family = "binomial")
+  data.frame(x = seq(min(modelf$expr.rel), max(modelf$expr.rel), length.out = 200),
+             y = predict(model, type="response", newdata= data.frame(expr.rel = seq(min(modelf$expr.rel), max(modelf$expr.rel), length.out = 200))),
+             test = unique(modelf$test), ncells = unique(modelf$ncells), norm = unique(modelf$norm))
+}, .progress = "text")
+
+
+#identify the sensitivty
+glm.singlenumber <- ddply(glmodels, c("test","norm","ncells","reads","assay"), summarise, fifty = x[min(which(y>0.5))])
+
+
+
+```
+
+Figure 2h: Illustrate the concept using an example (1000 reads per cell, 150 cells per perturbation)
+
+```{r figure2h, fig.width=6, fig.height=4}
+
+nr <- 1000; nc <- 150
+yint <- glm.singlenumber$fifty[glm.singlenumber$assay == "WholeTx" & glm.singlenumber$ncells == nc & glm.singlenumber$reads == nr]
+segplf <- data.frame(x = c(-3, yint),
+                     xend = c(yint,yint),
+                     y = c(0.5,0.5),
+                     yend = c(0.5,0))
+
+factor <- 1
+#pdf("/g/steinmetz/project/singcellTxn/CRISPRdrop/LV/Revisions/ReplaceFigures/002_illustrateSensitivity.pdf",width=4.5,height=2.1)
+ggplot(aes(x = x - log10(factor), y =y), geom="line", data= subset(glmodels, ncells ==nc& reads == nr)) + geom_line(aes(color=assay, group =assay)) + 
+  theme_bw(base_size=12) + theme(panel.grid = element_blank(), axis.text = element_text(color = "black", size = 8)) + xlab("Absoute expression change\n(UMI per cell)") + ylab(sprintf("Detection probability\n(100 samples a %d cells)", nc)) +
+  scale_x_continuous(breaks  = seq(-2,3), labels = c(0.01,0.1,1,10,100,1000)) + scale_color_manual(labels = c("TAP" = "TAP-Seq", "WholeTx" = "Whole Tx"), values = c("TAP" = "red", "WholeTx" = "blue"), name = "Protocol") + 
+  geom_point(aes(x = expr - log10(factor),y = as.numeric(hit),size = expr.rel, color = assay), data=subset(modelfs,  ncells ==nc & reads == nr), alpha =0.5) + scale_size_area(max_size=3, name = "Relative expression\nchange (fold)", breaks = 1:4, labels = 2^(1:4)) +
+  geom_segment(aes(x = x - log10(factor), y=y, xend = xend - log10(factor), yend= yend),data=segplf, color = "blue", linetype = 3)
+```
+
+Figure 2i (left panel), Difference in read depth required for achieving a given molecular sensitivty
+
+```{r figure2ileft, fig.width=4, fig.height=3}
+#pdf("/g/steinmetz/project/singcellTxn/CRISPRdrop/LV/Revisions/ReplaceFigures/002_readsVsMolSens.pdf",width=2.8,height=2.1)
+qplot(x = reads * ncells, y = fifty - log10(factor) , color =assay ,group = paste(ncells, assay), alpha =ncells, geom="line",data=subset(glm.singlenumber,ncells > 40)) + ylab("Molecular Sensitivity\n(UMI/cell)") + xlab("Total reads per perturbation")  + theme_bw()  + theme(legend.position = "bottom") + scale_x_log10()+  scale_color_manual(name ="Method",values = c("TAP"= "#ff0018","WholeTx" = "#0012f9", "WholeGenome" = "#555555"), guide=F) +  theme(panel.grid = element_blank(), panel.border = element_rect(fill=NA, size=1),axis.text = element_text(colour = "black", size=8)) + scale_alpha_continuous(range = c(0.25,1),limits=c(10,150),guide=F) + scale_y_continuous(breaks  = log10(c(0.03,0.1,0.3,1,3,10,30,100,300,1000,3000)), labels = c(0.03,0.1,0.3,1,3,10,30,100,300, 1000,3000))
+#dev.off()
+```
+
+Figure 2i (right panel), Molecular sensitivity as a function of read depth
+
+```{r figure2iright, fig.width=4,fig.height=3}
+glm.singlenumber$totalreads <- glm.singlenumber$reads * glm.singlenumber$ncells
+
+fit.tap <- loess(fifty ~ log10(totalreads), data= subset(glm.singlenumber,  assay == "TAP" & ncells > 40))
+fit.whole <- loess(fifty ~ log10(totalreads), data= subset(glm.singlenumber,  assay == "WholeTx"& ncells > 40))
+range <- 10^seq(3,6.5,by=0.001)
+sensrange <- seq(min(glm.singlenumber$fifty, na.rm = T),max(glm.singlenumber$fifty, na.rm=T),length.out = 1000)
+lookup <- data.frame(reads = range,
+                     sens.tap = predict(fit.tap, newdata = data.frame(totalreads = range)),
+                     sens.whole = predict(fit.whole, newdata = data.frame(totalreads = range)))
+cost <-data.frame(sens = sensrange,
+                  reads.tap = sapply(sensrange, function(x) if (min(abs(lookup$sens.tap - x),na.rm = T) < 0.002) lookup$reads[which.min(abs(lookup$sens.tap - x))] else NA),
+                  reads.whole = sapply(sensrange, function(x) if (min(abs(lookup$sens.whole - x),na.rm = T) < 0.002)  lookup$reads[which.min(abs(lookup$sens.whole - x))] else NA))
+cost$savings <- cost$reads.whole / cost$reads.tap
+
+#pdf("/g/steinmetz/project/singcellTxn/CRISPRdrop/LV/Revisions/ReplaceFigures/002_costMolecular.pdf",width=2.1,height=2.1)
+qplot(x  = sens - log10(factor), y = savings, data= cost, geom="line") + xlab("Molecular Sensitivity\n(UMI/cell)") + ylab("Fold cost reduction") + theme_bw() + theme(panel.grid = element_blank(), panel.border = element_rect(fill =NA, size=1), axis.text = element_text(size=8, color = "black")) + scale_y_continuous(limits=c(0,50), breaks = seq(0,50,by=10)) + scale_x_continuous(limits= c(-1.6,log10(0.2)), breaks  = log10(c(0.02,0.05,0.1,0.2)), labels = c(0.02,0.05,0.1,0.2))
+#dev.off()
+```
+

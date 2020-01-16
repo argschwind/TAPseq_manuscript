@@ -1,0 +1,113 @@
+---
+title: "gRNA capture efficiency (Figure 2c)"
+author: "Schraivogel, Gschwind et al."
+date: "03/12/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, fig.width=4,fig.height=3.5)
+```
+
+Perturbation data are loaded; to see how pertrubation were generated from raw sequencing data, see XXX
+
+```{r load}
+require(Matrix)
+require(ggplot2)
+require(reshape2)
+
+prturbations <- readRDS(url("http://steinmetzlab.embl.de/TAPdata/TAP.per.RDS")) #Targeted perturb-seq
+whole.per <- read.table(url("http://steinmetzlab.embl.de/TAPdata/Sample10X.perturb_status.txt"), header=T, row.names=1) #Classical Perturb-seq
+whole.amp.per <-  readRDS(url("http://steinmetzlab.embl.de/TAPdata/Whole.per.RDS")) #Perturb-seq with gRNA amplification, 
+
+```
+
+Compute log-likelihoods of the generative model described by Dixit et al and used by Hill et al.
+
+###Targeted perturb-seq
+
+```{r fitmodel}
+
+per.per.cell <- apply(prturbations,2,sum)
+O <- table(per.per.cell)
+loglik <- function(alpha, lambda, O) {
+  krange <- as.integer(names(O))
+sum(
+  sapply(krange, function(k) O[as.character(k)] * log(sum( #k: number of guides observed
+    sapply(max(c(k,1)):15, function(j) choose(j,k) * alpha ^ k * (1-alpha) ^ (j-k) * ( lambda ^ j / (factorial(j) * (exp(lambda) - 1))  )) #j: number of guides present
+    )))
+)
+  
+}
+
+#Compiute log likelihood over parameter ranges
+moir <- seq(0,3,by=0.04)
+alphar <- seq(0,1,by=0.001)
+complete <- sapply(moir, function(moi) {
+  sapply(alphar, loglik, lambda = moi, O = O)
+})
+col <- which.max(apply(complete,2,max))
+row <- which.max(complete[,col])
+
+
+seq(0,1,by=0.01)[96]
+colnames(complete)<- as.character(moir)
+rownames(complete)<- as.character(alphar)
+long <- melt(complete)
+tasc.eff <- alphar[row]
+```
+
+
+```{r heatmaps}
+#plot heatmaps (Figure S3d)
+qplot(data=long, x = Var1, y = Var2, fill = value, geom="tile") + scale_fill_gradientn(colours = c("black","black","#000033","#000077","blue","purple","red","yellow","white"), name = "LogLik") + theme_bw() + ylab("MoI") + xlab("Capture efficiency") + geom_point(data = data.frame(Var2 = moir[col], Var1 = alphar[row], value = 1), shape = 3,size=2) + theme(panel.grid = element_blank())
+```
+
+### Classical perturb-seq
+
+```{r fitclassical}
+O2 <- table(apply(whole.per,2,sum))
+
+complete <- sapply(moir, function(moi) {
+  sapply(alphar, loglik, lambda = moi, O = O2)
+})
+col <- which.max(apply(complete,2,max))
+row <- which.max(complete[,col])
+
+colnames(complete)<- as.character(moir)
+rownames(complete)<- as.character(alphar)
+long <- melt(complete)
+
+whole.eff <- alphar[row]
+
+qplot(data=long, x = Var1, y = Var2, fill = value, geom="tile") + scale_fill_gradientn(colours = c("black","black","#000033","#000077","blue","purple","red","yellow","white"), name = "LogLik") + theme_bw() + ylab("MoI") + xlab("Capture efficiency") + geom_point(data = data.frame(Var2 = moir[col], Var1 = alphar[row], value = 1), shape = 3,size=2) + theme(panel.grid = element_blank())
+
+```
+### Classical perturb-seq + gRNA Amplification
+
+```{r fitamp}
+O3 <- table(apply(whole.amp.per,2,sum))
+
+complete <- sapply(moir, function(moi) {
+  sapply(alphar, loglik, lambda = moi, O = O3)
+})
+col <- which.max(apply(complete,2,max))
+row <- which.max(complete[,col])
+
+colnames(complete)<- as.character(moir)
+rownames(complete)<- as.character(alphar)
+long <- melt(complete)
+
+whole.amp.eff <- alphar[row]
+
+qplot(data=long, x = Var1, y = Var2, fill = value, geom="tile") + scale_fill_gradientn(colours = c("black","black","#000033","#000077","blue","purple","red","yellow","white"), name = "LogLik") + theme_bw() + ylab("MoI") + xlab("Capture efficiency") + geom_point(data = data.frame(Var2 = moir[col], Var1 = alphar[row], value = 1), shape = 3,size=2) + theme(panel.grid = element_blank())
+```
+
+### Bar chart.
+
+```{r barchart}
+bardata <- data.frame(method = c("WholeTx", "WholeTx+", "TASC"), eff = c(whole.eff, whole.amp.eff,tasc.eff))
+
+qplot(x = reorder(method,eff), y = eff, data= bardata,fill=method, geom="col") + scale_fill_manual(guide=F, name = "Method", values =c("TASC" = "#ED2224", "WholeTx" = "#5671F4", "WholeTx+" = "#3C53A4")) + scale_x_discrete(labels = c("TASC" = "Targeted Seq", "WholeTx" = "Whole Tx", "WholeTx+" = "Whole Tx\n+ gRNA amp.")) + theme_bw() + theme(panel.grid = element_blank(),panel.border = element_rect(fill = NA, size=1), axis.text.y = element_text(colour = "black"), axis.text.x = element_text(angle=45, colour="black", hjust=1)) + xlab("") + ylab("gRNA capture efficiency") + scale_y_continuous(breaks = seq(0,1,by=0.25), limits = c(0,1))
+
+```

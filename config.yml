@@ -43,6 +43,19 @@ samples:
   tapk562deep: /g/steinmetz/incoming/solexa/2020-01-08-H2NJWBGXF/lane1/LIB49748_RBA49239/fastq
   wtxk562deep: /g/steinmetz/incoming/solexa/2020-01-08-H2NJWBGXF/lane1/LIB49749_RBA49240/fastq
 
+# sample ids for different experiments
+validation:   [11iv210ng, 11iv22ng, 8iv210ng, 8iv22ng, Sample10X]
+screen:       [8iScreen1, 11iScreen1]
+tap_vs_whole: [WholeTx, TAP1, TAP2]
+re_tap_vs_whole: [re-wholetx, re11iv210ng]
+drop-seq:     [W4ea, T4ea]
+bone_marrow:  [TAPtotalBM, TAPkitBM, WholeTotalBM, WholeKitBM]
+mouse_mix:    [wtxmmix, wtxlung, tapmix, taplung]
+human_mix:    [19s005246, taphumanmix]
+chr8_reps:    [perturbchr8v2, perturbchr8alt1, perturbchr8alt2]
+l1000:        [perturbL1000, perturbL1000a, perturbL1000b, perturb10xWTX]
+chr11_deep:   [tapk562deep, wtxk562deep]
+
 # estimated number of cells per sample, for which dge data should be extracted.
 cell_numbers:
   Sample10X:   8000
@@ -219,17 +232,6 @@ perturbation_status:
     perturbL1000a: 8
     perturbL1000b: 8
     perturb10xWTX: 8
-    
-# sample ids for different experiments
-validation:   [11iv210ng, 11iv22ng, 8iv210ng, 8iv22ng, Sample10X]
-screen:       [8iScreen1, 11iScreen1]
-tap_vs_whole: [WholeTx, TAP1, TAP2]
-drop-seq:     [W4ea, T4ea]
-bone_marrow:  [TAPtotalBM, TAPkitBM, WholeTotalBM, WholeKitBM]
-mouse_mix:    [wtxmmix, wtxlung, tapmix, taplung]
-human_mix:    [19s005246, taphumanmix]
-chr8_reps:    [perturbchr8v2, perturbchr8alt1, perturbchr8alt2]
-l1000:        [perturbL1000, perturbL1000a, perturbL1000b, perturb10xWTX]
 
 ## PARAMETERS FOR INDIVIDUAL RULES =================================================================
 

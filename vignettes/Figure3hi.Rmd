@@ -1,0 +1,228 @@
+---
+title: "Machine learning based predictions of ETPs (Figure 3h,i)"
+author: "Schraivogel, Gschwind et al."
+date: "28/11/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = F, message = F)
+options(bitmapType = "cairo")
+```
+
+This vignette reproduces the analysis in Figure 3h,i of Schraivogel, Gschwind, et al. 
+
+## Compute environment
+
+Load required packages and functions.
+
+```{r setupPackages, message=F, warning=F}
+.libPaths("/g/steinmetz/velten/Software/RLibs-seurat3/")
+library(tidyverse)
+library(randomForest)
+require(parallel)
+require(ROCR)
+require(plyr)
+require(Matrix)
+```
+
+## Data
+
+Differential expression testing was performed for the data from the screen and results were annotated with epigenome and HiC information. See XXXX. The results are loaded into R. Gene-wise mean expression levels are also loaded.
+
+```{r loadData}
+pairs <- read.csv(url("http://steinmetzlab.embl.de/TAPdata/chromatin_annotated_pairs.csv"), stringsAsFactors = F)
+expression <- readRDS(url("http://steinmetzlab.embl.de/TAPdata/screen_mean_expression.RDS"))
+```
+
+For comparing classifier performance between datasets, we annotate the enhancers used by [Gasperini et al.](https://www.ncbi.nlm.nih.gov/pubmed/30612741) in the same way and load it into R. Also, we load their differential expression testing results (Table S2b of Gasperini et al.)
+
+```{r loadGasperini}
+gasperini.predictors <- read.csv(url("http://steinmetzlab.embl.de/TAPdata/chromatin_annotated_pairs_gasperini_screen.csv"), stringsAsFactors = F)
+gasperini.hits <- read.csv(url("http://steinmetzlab.embl.de/TAPdata/gasperini_hits_screen.csv"),sep=";")
+
+```
+
+
+## Compute ROC curves (cross validated)
+
+Prepare data
+
+```{r prepareData}
+pairs$random <- rnorm(nrow(pairs)) #add a random covariate
+pairs <- subset(pairs, grepl("^chr", perturbation)) #removes controls
+pairs$expression <- expression[as.character(pairs$gene)] #add baseline expression level of gene
+pairs$enh_chr <- factor(pairs$enh_chr)
+
+#Select genes which are associated with at least one enhancer withn 300kb
+  sig_genes_pairs_300kb_atLeastOneHit <- pairs %>%
+  group_by(sample, gene) %>%
+  filter(dist_to_tss <= 0.3e6 ) %>% # changed, like in fulco
+  filter(sum(significant) > 0) %>%
+  select(-c(2, 5:13, 24:28, 31))
+  
+#Genes which are associated with at least one enhancer genome-wide
+  sig_genes_pairs <- pairs %>%
+  group_by(sample, gene) %>%
+  filter(sum(significant) > 0) %>%
+  select(-c(2, 5:13, 24:28, 31))
+```
+
+Compute ROC curves for classifiers based on various features
+
+```{r computeRoc}
+getAUROC <- function(usedata, predictors = c("dist_to_tss","Dnase.seq","H3K27ac","H3K27me3","H3K4me1","POLR2A","int_freq", "random"), log = NULL, id1 = "test", id2="test", roc1 = "sens", roc2 = "spec", validation = "CV") {
+  input <- usedata %>%
+  as.data.frame() %>%
+  select(c(predictors, "significant"))
+  
+  if(!is.null(log)) input[,log] <- log1p(input[,log])
+  
+  if (validation == "CV"){
+    cv.scheme <- sample(1:nrow(input),nrow(input),replace = F)
+    cv.scheme <- split(cv.scheme, rep_len(1:10,length.out = nrow(input)))
+  } else  {
+    cv.scheme <- 1:nrow(input)
+    cv.scheme <- split(cv.scheme, usedata$sample)
+      
+    }
+    # fit random forest model (using ranger)
+   votes <- mclapply(cv.scheme, function(cvx) {
+     rf_fit <- randomForest(as.factor(significant) ~ ., input[-cvx,], ntree=1000)
+    votes <- predict(rf_fit, type = "vote", newdata = input[cvx,])
+    data.frame(vote = votes[,2], truth = input$significant[cvx])
+   }, mc.cores= 4)
+   if (validation == "CV" | validation == "Sample") votes <- do.call(rbind,votes) else votes <- votes[[validation]]
+    
+     pred <- prediction(votes$vote, votes$truth)
+  roc <- performance(pred, "sens","spec")
+  roc2 <- performance(pred, "sens","prec")
+    auc <- performance(pred, "auc")
+    
+    data.frame(id1, id2, spec = roc@x.values[[1]], sens = roc@y.values[[1]], prec = roc2@x.values[[1]], auc = auc@y.values[[1]])
+    
+}
+
+singlePredictor <- function(predictor, result) {
+  factor <- sign(cor(predictor, result))
+  pred <- prediction(factor*predictor, result)
+  roc <- performance(pred, "sens","spec")
+  roc2 <- performance(pred, "sens","prec")
+  auc <- performance(pred, "auc")
+  
+  data.frame(spec = roc@x.values[[1]], sens = roc@y.values[[1]], prec = roc2@x.values[[1]], auc = auc@y.values[[1]])
+  
+}
+
+getRocList <- function(genepairs, id1 = "1MB"){
+rocs <- list(getAUROC(genepairs, id1 = id1,id2 = "All"),
+        getAUROC(genepairs, predictors = "random", id1 = id1,id2 = "None"),
+        getAUROC(genepairs, predictors = c("Dnase.seq","H3K27ac","H3K27me3","H3K4me1","POLR2A"), id1 = id1,id2 = "Epigenome"),
+        getAUROC(genepairs, predictors = c("dist_to_tss"), id1 = id1,id2 = "Distance"),
+        getAUROC(genepairs, predictors = c("int_freq"), id1 = id1,id2 = "Interaction Frequency")
+        )
+rocs <- do.call(rbind, rocs)
+}
+
+getarea <- function(x, y) {
+  dx <- x[-1] - x[-length(x)]
+  ymean <- (y[-1] + y[-length(y)]) /2
+  sum(dx * ymean, na.rm=T)
+}
+rocs.300kb.1hit <- getRocList(sig_genes_pairs_300kb_atLeastOneHit, "300kb, at least 1 hit")
+rocs.genome <- getRocList(sig_genes_pairs, "Genome-wide")
+
+rocs.combined <- rbind(rocs.300kb.1hit,rocs.genome)
+```
+
+Plot Figure 3h, S6g: Cross-validated ROC curves of different feature classes
+
+```{r figure3h, fig.width = 7, fig.height=2.8}
+rocs.combined$id3 <- grepl(", high", rocs.combined$id1)
+rocs.combined$id1 <- gsub(", high","", rocs.combined$id1)
+rocs.summary <- ddply(rocs.combined, c("id1","id2","id3"), summarise, auc = unique(auc), auprc = getarea(sens, prec))
+rocs.summary$id2 <- as.character(rocs.summary$id2)
+rocs.summary$id2[rocs.summary$id2 == "Interaction Frequency"] <-"Interaction freq."
+
+
+test <- subset(rocs.combined, id1%in%c("300kb, at least 1 hit","Genome-wide") & id2%in%c("All", "Interaction Frequency", "Distance", "Epigenome"))
+
+mappers <- c("300kb, at least 1 hit" = "Gene-proximal enhancers","Genome-wide"="Genome-wide enhancers")
+
+qplot(x = sens, y = prec, data = test, geom="line" , color = id2) + theme_bw() + xlab("Recall (10-fold CV)") + ylab("Precision (10-fold CV)")+ facet_grid(.  ~ mappers[as.character(id1)]) +
+  scale_color_manual(name = "Predictor", values = c("All" = "purple", "Distance" = "#cc5558","Epigenome" = "#4984b3","Interaction Frequency" = "#edb41f", "Position" = "green", "Not position"="red"),
+                     labels = c("All" = "Combined model", "Epigenome" = "Epigenome model", "Distance" = "Distance", "Interaction Frequency" = "Interaction F.")) + theme(panel.grid = element_blank())
+```
+
+## Comparison between data sets
+
+Prepare Gasperini data
+
+```{r prepareGasperiniData}
+gasperini.hits$perturbation <- with(gasperini.hits, sprintf("%s:%d-%d",chr.candidate_enhancer,start.candidate_enhancer+1 , stop.candidate_enhancer))
+
+gasperini.predictors$significant <- sapply(1:nrow(gasperini.predictors), function(i) gasperini.predictors$perturbation[i] %in% gasperini.hits$perturbation  & gasperini.predictors$gene[i] %in% gasperini.hits$target_gene_short)
+
+gasperini_atLeastOneHit <- gasperini.predictors %>%
+  group_by(gene) %>%
+  filter(dist_to_tss <= 0.3e6 ) %>% # changed, like in fulco
+  filter(sum(significant) > 0)
+
+gasperini_atLeastOneHit$sample <- "Gasperini"
+gasperini_atLeastOneHit$significant <- as.integer(gasperini_atLeastOneHit$significant)
+gasperini_atLeastOneHit$random <- rnorm(nrow(gasperini_atLeastOneHit))
+usecol <- intersect(colnames(gasperini_atLeastOneHit), colnames(sig_genes_pairs_300kb_atLeastOneHit))
+combined <- rbind(sig_genes_pairs_300kb_atLeastOneHit[,usecol], na.omit(gasperini_atLeastOneHit[,usecol]))
+combined$sample[combined$sample != "Gasperini"] <- "Schraivogel"
+```
+
+Run cross-predictions, plot ROC curves
+```{r crosspredictions, fig.width=5, fig.height=3}
+
+test <- subset(rocs.combined, id1%in%c("300kb, at least 1 hit","Genome-wide") & id2%in%c("All", "Interaction Frequency", "Distance", "Epigenome"))
+
+chr11_predicts_chr8 <- getAUROC(sig_genes_pairs_300kb_atLeastOneHit, id1 = "chr11Tochr8",id2 = "All", validation = "chr8")
+chr8_predicts_chr11 <- getAUROC(sig_genes_pairs_300kb_atLeastOneHit, id1 = "chr8Tochr11",id2 = "All", validation = "chr11")
+we_predict_gasperini <- getAUROC(combined, id1 = "WeToGasperini",id2 = "All", validation = "Gasperini")
+gasperini_predicts_us <- getAUROC(combined, id1 = "GasperiniToUs",id2 = "All", validation = "Schraivogel")
+
+
+cv<- subset(test, id1=="300kb, at least 1 hit" & id2 =="All" & !id3, select = colnames(chr8_predicts_chr11))
+
+
+toplot <- rbind(chr11_predicts_chr8, chr8_predicts_chr11, cv)
+qplot(x = sens, y = prec, data = toplot, geom="line" , color = id1) + theme_bw() + xlab("Recall") + ylab("Precision") + 
+  scale_color_manual(name = "Test set", values = c("chr11Tochr8" = "#3D55A4", "chr8Tochr11" = "#EE2832", "300kb, at least 1 hit"= "black","WeToGasperini" = "orange"),
+                     labels =  c("chr11Tochr8" = "Chr. 8", "chr8Tochr11" = "Chr. 11", "300kb, at least 1 hit"= "10-fold CV", "WeToGasperini" = "Gasperini et al.") ) + 
+  theme(panel.grid = element_blank(), panel.border = element_rect(fill=NA, size=1))
+
+toplot <- rbind(gasperini_predicts_us, we_predict_gasperini, cv)
+qplot(x = sens, y = prec, data = toplot, geom="line" , color = id1) + theme_bw() + xlab("Recall") + ylab("Precision") + 
+  scale_color_manual(name = "Training set", values = c("WeToGasperini" = "#EDB421", "GasperiniToUs" = "#79CDCD","300kb, at least 1 hit" = "black"),
+                     labels =  c("WeToGasperini" = "Schraivogel et al.", "GasperiniToUs" = "Gasperini et al.","300kb, at least 1 hit"= "10-fold CV") ) + 
+  theme(panel.grid = element_blank(), panel.border = element_rect(fill=NA, size=1), axis.text=element_text(colour = "black"))
+
+```
+
+Summarize into a bar chart (Figure S3i)
+
+
+```{r barchart, fig.width=4,fig.height=3}
+
+toplot <- rbind(chr11_predicts_chr8, chr8_predicts_chr11, cv, gasperini_predicts_us, we_predict_gasperini)
+
+
+getarea <- function(x, y) {
+  dx <- x[-1] - x[-length(x)]
+  ymean <- (y[-1] + y[-length(y)]) /2
+  sum(dx * ymean, na.rm=T)
+}
+summarised <- ddply(toplot, "id1", summarise, auprc = getarea(sens,prec))
+summarised$id1 <- factor(summarised$id1, levels = rev(c("300kb, at least 1 hit","chr8Tochr11", "chr11Tochr8","WeToGasperini","GasperiniToUs")))
+
+qplot(x = id1, y = auprc, data = summarised, geom="col") + theme_bw() + xlab("Training dataset -> Test dataset") + ylab("AUPRC") + 
+  scale_x_discrete(labels =  c("WeToGasperini" = "Schraivogel et al.\n-> Gasperini et al", "GasperiniToUs" = "Gasperini et al.\n->Schraivogel et al.",
+                               "chr11Tochr8" = "Chr. 11 -> Chr. 8", "chr8Tochr11" = "Chr 8 -> Chr. 11", "300kb, at least 1 hit"= "10-fold CV") ) + 
+  theme(panel.grid = element_blank(), panel.border = element_rect(fill=NA, size=1)) + coord_flip()
+
+```
