@@ -9,7 +9,6 @@ include: "rules/align_reads.smk"
 include: "rules/extract_dge.smk"
 include: "rules/analyses.smk"
 include: "rules/chromatin_annotated_etps.smk"
-include: "rules/revision_analyses.smk"
 include: "rules/process_rnaseq.smk"
 
 # ALL RULE -----------------------------------------------------------------------------------------
@@ -20,62 +19,91 @@ rule all:
   input:
     align = expand("results/alignment/{sample}_align_report.html", sample = config["samples"]),
     dge = expand("results/dge/{sample}_dge_report.html", sample = config["samples"]),
-    analyses = ["results/analyses/tapseq_vs_cropseq.html",
-                "results/analyses/screen_data_qc.html",
-                "results/analyses/compare_covariates.html",
-                "results/analyses/map_enhancers.html",
-                "results/analyses/chromatin_analyses_screen.html",
-                "results/analyses/hic_analysis.html",
-                "results/analyses/abc_analysis.html"]
+    analyses = ["results/analyses/tapseq_vs_cropseq.html", "results/analyses/screen_data_qc.html",
+      "results/analyses/compare_covariates.html", "results/analyses/map_enhancers.html",
+      "results/analyses/chromatin_analyses_screen.html", "results/analyses/hic_analysis.html",
+      "results/analyses/abc_analysis.html"],
+    ds_dge = [expand("data/Sample10X/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+        rpc = config["downsample"]["reads_per_cell"]["Sample10X"]),
+      expand("data/11iv210ng/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+        rpc = config["downsample"]["reads_per_cell"]["11iv210ng"]),
+      expand("data/11iv22ng/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+        rpc = config["downsample"]["reads_per_cell"]["11iv22ng"]),
+      expand("data/8iv210ng/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+        rpc = config["downsample"]["reads_per_cell"]["8iv210ng"]),
+      expand("data/8iv22ng/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+        rpc = config["downsample"]["reads_per_cell"]["8iv22ng"]),
+      expand("data/wtxmmix/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+        rpc = config["downsample"]["reads_per_cell"]["wtxmmix"]),
+      expand("data/wtxlung/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+        rpc = config["downsample"]["reads_per_cell"]["wtxlung"]),
+      expand("data/tapmix/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+        rpc = config["downsample"]["reads_per_cell"]["tapmix"]),
+      expand("data/taplung/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+        rpc = config["downsample"]["reads_per_cell"]["taplung"]),
+      expand("data/taphumanmix/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+        rpc = config["downsample"]["reads_per_cell"]["taphumanmix"]),
+      expand("data/perturbchr8v2/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+        rpc = config["downsample"]["reads_per_cell"]["perturbchr8v2"]),
+      expand("data/perturbchr8alt1/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+        rpc = config["downsample"]["reads_per_cell"]["perturbchr8alt1"]),
+      expand("data/perturbchr8alt2/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+        rpc = config["downsample"]["reads_per_cell"]["perturbchr8alt2"]),
+      expand("data/perturbL1000/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+        rpc = config["downsample"]["reads_per_cell"]["perturbL1000"]),
+      expand("data/tapk562deep/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+        rpc = config["downsample"]["reads_per_cell"]["tapk562deep"]),
+      expand("data/wtxk562deep/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+        rpc = config["downsample"]["reads_per_cell"]["wtxk562deep"]),
+      expand("data/W4ea/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+        rpc = config["downsample"]["reads_per_cell"]["W4ea"]),
+      expand("data/T4ea/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+        rpc = config["downsample"]["reads_per_cell"]["T4ea"]),
+      expand("data/Sample10X/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+        rpc = config["downsample"]["reads_per_cell"]["Sample10X"]),
+      expand("data/TAP1/downsampled/dge_{rpc}_avg_reads_per_cell_onGenes.txt",
+        rpc = config["downsample"]["reads_per_cell"]["TAP1"]),
+      expand("data/TAP2/downsampled/dge_{rpc}_avg_reads_per_cell_onGenes.txt",
+        rpc = config["downsample"]["reads_per_cell"]["TAP2"]),
+      expand("data/WholeTx/downsampled/dge_{rpc}_avg_reads_per_cell_onGenes.txt",
+        rpc = config["downsample"]["reads_per_cell"]["WholeTx"]),
+      expand("data/taplung/downsampled_150_genes/dge_{rpc}_avg_reads_per_cell.txt",
+        rpc = [1000, 1500, 3500, 5000, 10000, 15000, 20000, 40000]),
+      expand("data/tapmix/downsampled_150_genes/dge_{rpc}_avg_reads_per_cell.txt",
+        rpc = [1000, 1500, 3500, 5000, 10000, 15000, 20000, 40000, 80000, 150000]),
+      expand("data/{sample}/downsampled/dge_{reads}_avg_reads_per_cell_onGenes.txt",
+        sample = ["TAPtotalBM", "TAPkitBM"],
+        reads = [100, 500, 1000, 1500, 2000, 2500, 5000, 5500]),
+      expand("data/{sample}/downsampled/dge_{reads}_avg_reads_per_cell_onGenes.txt",
+        sample = ["WholeTotalBM", "WholeKitBM"],
+        reads = [100, 500, 1000, 1500, 2000, 2500, 5000, 5500, 10000, 20000, 30000]),
+      "data/WholeTotalBM/downsampled/dge_50000_avg_reads_per_cell_onGenes.txt"]
 
 # RULES TO RUN WORKFLOW PARTIALLY ------------------------------------------------------------------
 
-# all validation analyses
-rule tapseq_validation:
+# all input for figure 1 vignettes
+rule Figure1:
   input:
-    analyses ="results/analyses/tapseq_vs_cropseq.html",
-    ds_dge = [expand("data/re-wholetx/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
-                rpc = config["downsample"]["reads_per_cell"]["re-wholetx"]),
-              expand("data/re11iv210ng/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
-                rpc = config["downsample"]["reads_per_cell"]["re11iv210ng"]),
-              expand("data/W4ea/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
-                rpc = config["downsample"]["reads_per_cell"]["W4ea"]),
-              expand("data/T4ea/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
-                rpc = config["downsample"]["reads_per_cell"]["T4ea"]),
-              expand("data/wtxmmix/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
-                rpc = config["downsample"]["reads_per_cell"]["wtxmmix"]),
-              expand("data/wtxlung/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
-                rpc = config["downsample"]["reads_per_cell"]["wtxlung"]),
-              expand("data/tapmix/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
-                rpc = config["downsample"]["reads_per_cell"]["tapmix"]),
-              expand("data/taplung/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
-                rpc = config["downsample"]["reads_per_cell"]["taplung"]),
-              expand("data/19s005246/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
-                rpc = config["downsample"]["reads_per_cell"]["19s005246"]),
-              expand("data/taphumanmix/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
-                rpc = config["downsample"]["reads_per_cell"]["taphumanmix"]),
-              expand("data/perturbchr8v2/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
-                rpc = config["downsample"]["reads_per_cell"]["perturbchr8v2"]),
-              expand("data/perturbchr8alt1/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
-                rpc = config["downsample"]["reads_per_cell"]["perturbchr8alt1"]),
-              expand("data/perturbchr8alt2/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
-                rpc = config["downsample"]["reads_per_cell"]["perturbchr8alt2"]),
-              expand("data/perturbL1000/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
-                rpc = config["downsample"]["reads_per_cell"]["perturbL1000"]),
-              expand("data/perturbL1000a/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
-                rpc = config["downsample"]["reads_per_cell"]["perturbL1000a"]),
-              expand("data/perturbL1000b/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
-                rpc = config["downsample"]["reads_per_cell"]["perturbL1000b"]),
-              expand("data/perturb10xWTX/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
-                rpc = config["downsample"]["reads_per_cell"]["perturb10xWTX"]),
-              expand("data/tapk562deep/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+    align = expand("results/alignment/{sample}_align_report.html", sample = config["figure1"]),
+    dge = expand("results/dge/{sample}_dge_report.html", sample = config["figure1"]),
+    ds_dge = [expand("data/tapk562deep/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
                 rpc = config["downsample"]["reads_per_cell"]["tapk562deep"]),
               expand("data/wtxk562deep/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
-                rpc = config["downsample"]["reads_per_cell"]["wtxk562deep"]),
-              expand("data/taplung/downsampled_150_genes/dge_{rpc}_avg_reads_per_cell.txt",
-                rpc = [1000, 1500, 3500, 5000, 10000, 15000, 20000, 40000]),
-              expand("data/tapmix/downsampled_150_genes/dge_{rpc}_avg_reads_per_cell.txt",
-                rpc = [1000, 1500, 3500, 5000, 10000, 15000, 20000, 40000, 80000, 150000])]
+                rpc = config["downsample"]["reads_per_cell"]["wtxk562deep"])]
+
+# all input for figure 2 vignettes              
+rule Figure2:
+  input:
+    align = expand("results/alignment/{sample}_align_report.html", sample = config["figure2"]),
+    dge = expand("results/dge/{sample}_dge_report.html", sample = config["figure2"]),
+    ds_dge = [expand("data/Sample10X/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+                rpc = config["downsample"]["reads_per_cell"]["Sample10X"]),
+              expand("data/TAP1/downsampled/dge_{rpc}_avg_reads_per_cell_onGenes.txt",
+                rpc = config["downsample"]["reads_per_cell"]["TAP1"]),
+              expand("data/TAP2/downsampled/dge_{rpc}_avg_reads_per_cell_onGenes.txt",
+                rpc = config["downsample"]["reads_per_cell"]["TAP2"]),
+              expand("data/WholeTx/downsampled/dge_{rpc}_avg_reads_per_cell_onGenes.txt",
+                rpc = config["downsample"]["reads_per_cell"]["WholeTx"])]
                 
 # all enhancer analyses
 rule enhancer_screen:
@@ -101,12 +129,55 @@ rule bone_marrow_cell_types:
         sample = ["WholeTotalBM", "WholeKitBM"],
         reads = [100, 500, 1000, 1500, 2000, 2500, 5000, 5500, 10000, 20000, 30000]),
       "data/WholeTotalBM/downsampled/dge_50000_avg_reads_per_cell_onGenes.txt"]
-    
-    
-    
-    
-    
-
+      
+# all validation data and input
+rule tapseq_validation:
+  input:
+    align = expand("results/alignment/{sample}_align_report.html",
+      sample = config["tapseq_validation"]),
+    dge = expand("results/dge/{sample}_dge_report.html", sample = config["tapseq_validation"]),
+    analyses = "results/analyses/tapseq_vs_cropseq.html",
+    ds_dge = [expand("data/Sample10X/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+        rpc = config["downsample"]["reads_per_cell"]["Sample10X"]),
+      expand("data/11iv210ng/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+        rpc = config["downsample"]["reads_per_cell"]["11iv210ng"]),
+      expand("data/11iv22ng/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+        rpc = config["downsample"]["reads_per_cell"]["11iv22ng"]),
+      expand("data/8iv210ng/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+        rpc = config["downsample"]["reads_per_cell"]["8iv210ng"]),
+      expand("data/8iv22ng/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+        rpc = config["downsample"]["reads_per_cell"]["8iv22ng"]),
+      expand("data/wtxmmix/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+        rpc = config["downsample"]["reads_per_cell"]["wtxmmix"]),
+      expand("data/wtxlung/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+        rpc = config["downsample"]["reads_per_cell"]["wtxlung"]),
+      expand("data/tapmix/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+        rpc = config["downsample"]["reads_per_cell"]["tapmix"]),
+      expand("data/taplung/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+        rpc = config["downsample"]["reads_per_cell"]["taplung"]),
+      expand("data/taphumanmix/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+        rpc = config["downsample"]["reads_per_cell"]["taphumanmix"]),
+      expand("data/perturbchr8v2/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+        rpc = config["downsample"]["reads_per_cell"]["perturbchr8v2"]),
+      expand("data/perturbchr8alt1/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+        rpc = config["downsample"]["reads_per_cell"]["perturbchr8alt1"]),
+      expand("data/perturbchr8alt2/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+        rpc = config["downsample"]["reads_per_cell"]["perturbchr8alt2"]),
+      expand("data/perturbL1000/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+        rpc = config["downsample"]["reads_per_cell"]["perturbL1000"]),
+      expand("data/tapk562deep/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+        rpc = config["downsample"]["reads_per_cell"]["tapk562deep"]),
+      expand("data/wtxk562deep/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+        rpc = config["downsample"]["reads_per_cell"]["wtxk562deep"]),
+      expand("data/W4ea/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+        rpc = config["downsample"]["reads_per_cell"]["W4ea"]),
+      expand("data/T4ea/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+        rpc = config["downsample"]["reads_per_cell"]["T4ea"]),
+      expand("data/taplung/downsampled_150_genes/dge_{rpc}_avg_reads_per_cell.txt",
+        rpc = [1000, 1500, 3500, 5000, 10000, 15000, 20000, 40000]),
+      expand("data/tapmix/downsampled_150_genes/dge_{rpc}_avg_reads_per_cell.txt",
+        rpc = [1000, 1500, 3500, 5000, 10000, 15000, 20000, 40000, 80000, 150000])]
+   
 # create whole-genome and tap-seq alignment references
 rule alignment_references:
   input:

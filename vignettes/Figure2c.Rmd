@@ -9,16 +9,18 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, fig.width=4,fig.height=3.5)
 ```
 
-Perturbation data are loaded; to see how pertrubation were generated from raw sequencing data, see XXX
+Perturbation data are loaded; to generate these data, run the rule the rule Figure2 of https://github.com/argschwind/tapseq_manuscript
 
 ```{r load}
 require(Matrix)
 require(ggplot2)
 require(reshape2)
 
-prturbations <- readRDS(url("http://steinmetzlab.embl.de/TAPdata/TAP.per.RDS")) #Targeted perturb-seq
+prturbations <- readRDS(url("http://steinmetzlab.embl.de/TAPdata/TAP.per.RDS")) ##this corresponds to the combination of ../data/TAP_DIFFEX_sample1/perturb_status.txt and ../data/TAP_DIFFEX_sample2/perturb_status.txt if the snakemake pipeline was run.
 whole.per <- read.table(url("http://steinmetzlab.embl.de/TAPdata/Sample10X.perturb_status.txt"), header=T, row.names=1) #Classical Perturb-seq
-whole.amp.per <-  readRDS(url("http://steinmetzlab.embl.de/TAPdata/Whole.per.RDS")) #Perturb-seq with gRNA amplification, 
+##this corresponds to ../data/WTX_REF/perturb_status.txt if the snakemake pipeline was run.
+
+whole.amp.per <-  readRDS(url("http://steinmetzlab.embl.de/TAPdata/Whole.per.RDS")) #Perturb-seq with gRNA amplification,  ##this corresponds to ../data/WTX_DIFFEX/perturb_status.txt if the snakemake pipeline was run.
 
 ```
 

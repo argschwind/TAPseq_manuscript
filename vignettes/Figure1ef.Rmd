@@ -15,17 +15,18 @@ This vignette reproduces the analysis in Figure 1d,e of Schraivogel, Gschwind, e
 
 ## Data
 
-We need downsampled data for the deeply sequenced experiment of the chromosome 11 panel, and the deeply sequenced whole transcriptome experiment. Data were downsampeld at the level of raw reads to realistically simulate a lower sequencing depth. The downsampling can be reproduced from the files provided on GEO using XXX; alternatively we provide the results:
+We need downsampled data for the deeply sequenced experiment of the chromosome 11 panel, and the deeply sequenced whole transcriptome experiment. Data were downsampeld at the level of raw reads to realistically simulate a lower sequencing depth. The downsampling can be reproduced from the files provided on GEO by running the rule Figure1 of https://github.com/argschwind/tapseq_manuscript (documented there); alternatively we provide the results - please run the following code in the folder containing this vignette:
 
 ```{sh getReferenceData, eval = F}
-mkdir -p data
-wget http://steinmetzlab.embl.de/TAPdata/TASC_DEEP_p1.zip
-unzip -j -d data/TASC_DEEP_p1 TASC_DEEP_p1.zip
+mkdir -p ../data/TAP_DEEP_p1/downsampled
+wget http://steinmetzlab.embl.de/TAPdata/TAP_DEEP_p1.zip
+unzip -j -d ../data/TAP_DEEP_p1/downsampled TAP_DEEP_p1.zip
 
+mkdir -p ../data/WTX_REF_Deep/downsampled
 wget http://steinmetzlab.embl.de/TAPdata/WTX_REF_DEEP.zip
-unzip -j -d data/WTX_REF_DEEP WTX_REF_DEEP.zip
+unzip -j -d ../data/WTX_REF_Deep/downsampled WTX_REF_DEEP.zip
 
-rm TASC_DEEP_p1.zip WTX_REF_DEEP.zip
+rm TAP_DEEP_p1.zip WTX_REF_DEEP.zip
 ```
 
 In R, we simply load info on the panel:
@@ -61,7 +62,7 @@ Simply count the UMIs observed at various read depths:
 ```{r countUMI, results = "hide"}
 
 folders <- c(
-    "k562.82.10x.low" = "data/TASC_DEEP_p1/"
+    "k562.82.10x.low" = "../data/TAP_DEEP_p1/downsampled/"
 )
 
 
@@ -93,7 +94,7 @@ getUMI <- function(n, frPositive = T){
 
 #for whole Tx data, given a reference panel
 getUMI2 <- function(ps, frPositive=T, onPanel=T) {
-  folder <- "data/WTX_REF_DEEP//"
+  folder <- "../data/WTX_REF_Deep/downsampled/"
   reads <- as.integer(unique(gsub("dge_(.+)_avg_reads_per_cell.txt","\\1",list.files(folder,"dge_.+_avg_reads_per_cell.txt"))))
 
   out <- lapply(reads, function(nreads ){
@@ -158,6 +159,7 @@ For panel e, we additionally need to know the expression level of the various ge
 ```{r nondownsampled}
 
 total.nods <- read.csv(url("http://steinmetzlab.embl.de/TAPdata/WTX_REF_Deep.counts.csv"), row.names=1)
+#this corresponds to ../data/WTX_REF_Deep/dge.txt if the snakemake pipeline was run.
 
 base_expression <- apply(total.nods[panels[[1]],], 1, mean)
 bin_expression <- infotheo::discretize(base_expression, nbins = 4)$X

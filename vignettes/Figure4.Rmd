@@ -18,21 +18,28 @@ This vignette reproduces the analysis in Figure 4 of Schraivogel, Gschwind, et a
 As whole transcriptome reference data for bone marrow cell types, we use the data by Baccin et al., Nature Cell Biology in press.
 
 ```{sh getReferenceData, eval = F}
-mkdir data
-wget https://nicheview.shiny.embl.de/RNAMagnetDataBundle.zip
-unzip -j -d data RNAMagnetDataBundle.zip
+mkdir ../data
+wget https://static-content.springer.com/esm/art%3A10.1038%2Fs41556-019-0439-6/MediaObjects/41556_2019_439_MOESM4_ESM.zip #https://nicheview.shiny.embl.de/RNAMagnetDataBundle.zip
+unzip -j -d ../data 41556_2019_439_MOESM4_ESM.zip
 
-rm RNAMagnetDataBundle.zip
+rm 41556_2019_439_MOESM4_ESM.zip
 ```
 
-We also download the count matrices for the targeted seq expeirments of total and c-Kit+ bone marrow. Creation of count matrices from raw files provided on GEO can be reproduced using XXX.
+We also download the count matrices for the targeted seq expeirments of total and c-Kit+ bone marrow. Creation of count matrices from raw files provided on GEO can be reproduced by running the rule bone_marrow_cell_types of the pipeline provided at https://github.com/argschwind/tapseq_manuscript
 
 ```{sh getCountData, eval =F}
-wget -O data/dge_TAPtotalBM.txt.gz http://steinmetzlab.embl.de/TAPdata/dge_TAPtotalBM.txt.gz
-wget -O data/dge_TAPkitBM.txt.gz http://steinmetzlab.embl.de/TAPdata/dge_TAPkitBM.txt.gz
+mkdir -p ../data/TAP_CT_totalBM/downsampled
+mkdir -p ../data/TAP_CT_kitBM/downsampled
+mkdir -p ../data/WTX_CT_kitBM/downsampled
+mkdir -p ../data/WTX_CT_totalBM/downsampled
+
+wget -O ../data/TAP_CT_totalBM/dge.txt.gz http://steinmetzlab.embl.de/TAPdata/dge_TAPtotalBM.txt.gz
+gunzip ../data/TAP_CT_totalBM/dge.txt.gz
+wget -O ../data/TAP_CT_kitBM/dge.txt.gz http://steinmetzlab.embl.de/TAPdata/dge_TAPkitBM.txt.gz
+gunzip ../data/TAP_CT_kitBM/dge.txt.gz
 ```
 
-Data were downsampeld at the level of raw reads to realistically simulate a lower sequencing depth. The downsampling can be reproduced from the files provided on GEO using XXX; alternatively we provide the results:
+Data were downsampeld at the level of raw reads to realistically simulate a lower sequencing depth. The downsampling can be likewise be reproduced from the files provided on GEO using the rule bone_marrow_cell_types of the pipeline provided; alternatively we provide the results:
 
 ```{sh getDownsampledData, eval = F}
 wget http://steinmetzlab.embl.de/TAPdata/TAPkitBM.zip
@@ -40,10 +47,10 @@ wget http://steinmetzlab.embl.de/TAPdata/TAPtotalBM.zip
 wget http://steinmetzlab.embl.de/TAPdata/WholeKitBM.zip
 wget http://steinmetzlab.embl.de/TAPdata/WholeTotalBM.zip
 
-unzip -j -d data/TAPkitBM TAPkitBM.zip
-unzip -j -d data/TAPtotalBM TAPtotalBM.zip
-unzip -j -d data/WholeKitBM WholeKitBM.zip
-unzip -j -d data/WholeTotalBM WholeTotalBM.zip
+unzip -j -d ../data/TAP_CT_kitBM/downsampled TAPkitBM.zip
+unzip -j -d ../data/TAP_CT_totalBM/downsampled TAPtotalBM.zip
+unzip -j -d ../data/WTX_CT_kitBM/downsampled WholeKitBM.zip
+unzip -j -d ../data/WTX_CT_totalBM/downsampled WholeTotalBM.zip
 
 rm TAPkitBM.zip TAPtotalBM.zip WholeKitBM.zip WholeTotalBM.zip
 
@@ -69,8 +76,8 @@ require(mclust)
 For TAP-seq, raw count matrixes are loaded into R and processed into a Seurat object using default settings.
 
 ```{r setupTAPseurat, results = "hide"}
-dir <- "data"
-files <- c("dge_TAPkitBM.txt.gz", "dge_TAPtotalBM.txt.gz")
+dir <- "../data"
+files <- c("TAP_CT_kitBM/dge.txt", "TAP_CT_totalBM/dge.txt")
 
 DGE <-
   lapply(file.path(dir, files),
@@ -80,7 +87,7 @@ names(DGE) <- gsub("dge_(.+)\\.txt.gz","\\1",files)
 DGE <-
   lapply(names(DGE), function(n) {
     x <- DGE[[n]]
-    colnames(x) <- paste(n, colnames(x), sep = "-")
+    colnames(x) <- paste(gsub("/dge.txt","",n), colnames(x), sep = "-")
     x
   })
 
@@ -109,7 +116,7 @@ TAPseq$cluster <- Idents(TAPseq)
 Reference data is simply loaded into R as a Seurat object. Only cell types abundantly present in c-Kit+ and total bone marrow are used for the reference.
 
 ```{r setupRefseurat}
-load("data/NicheData10x.rda")
+load("../data/NicheData10x.rda")
 ```
 
 ```{r collorscheme, echo=F}
@@ -144,8 +151,8 @@ UseCells <- FindVariableFeatures(UseCells)
 UseCells <- RunPCA(UseCells)
 UseCells <- FindNeighbors(UseCells)
 UseCells <- FindClusters(UseCells)
-newnames <- gsub("2018_2_HSPC_","WholeKitBM-",colnames(UseCells))
-newnames <- gsub("2017_9_totalBM_","WholeTotalBM-",newnames)
+newnames <- gsub("2018_2_HSPC_","WTX_CT_kitBM-",colnames(UseCells))
+newnames <- gsub("2017_9_totalBM_","WTX_CT_totalBM-",newnames)
 names(newnames) <- colnames(UseCells)
 UseCells <- RenameCells(UseCells, new.names = newnames)
 
@@ -333,22 +340,22 @@ qplot(x = 100*kappa, y= savings, data=cost, geom="line") + xlab("% correctly cla
 ## Downsampled t-SNE
 
 ```{r tsne, width=4,height=4}
-folders <- c("WholeKitBM", "WholeTotalBM")
+folders <- c("WTX_CT_kitBM/downsampled/","WTX_CT_totalBM/downsampled/")
 folders <- file.path(dir, folders)
 Whole100 <- getDS(folders, "perSample","average",100, output = "seurat",minFeature = 10)
 Whole100 <- RunTSNE(Whole100, dims = 1:15)
 plf <- data.frame(x = Embeddings(Whole100,"tsne")[,1],
                   y = Embeddings(Whole100,"tsne")[,2])
 include <- colnames(UseCells)
-include <- gsub("2018_2_HSPC_","WholeKitBM-",include)
-include <- gsub("2017_9_totalBM_","WholeTotalBM-",include)
+include <- gsub("2018_2_HSPC_","TAP_CT_kitBM-",include)
+include <- gsub("2017_9_totalBM_","TAP_CT_totalBM-",include)
 id <- Idents(UseCells); names(id) <- include
 plf <- plf[intersect(include,rownames(plf)),]
 plf$id <- id[rownames(plf)]
 qplot(x=x,y=y,color=id,data=plf, size=I(0.5)) + scale_color_manual(values=NicheDataColors, guide=F) + theme_bw() + theme(panel.grid = element_blank(), axis.title = element_blank(),axis.text = element_blank(),axis.ticks = element_blank())
 
 
-folders <- c("TAPkitBM", "TAPtotalBM")
+folders <- c("TAP_CT_kitBM/downsampled/", "TAP_CT_totalBM/downsampled/")
 folders <- file.path(dir, folders)
 TAP100 <- getDS(folders, "perSample","average",100, output = "seurat", ncells = 4397)
 TAP100 <- RunTSNE(TAP100, dims = 1:15)

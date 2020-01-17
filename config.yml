@@ -43,18 +43,15 @@ samples:
   tapk562deep: /g/steinmetz/incoming/solexa/2020-01-08-H2NJWBGXF/lane1/LIB49748_RBA49239/fastq
   wtxk562deep: /g/steinmetz/incoming/solexa/2020-01-08-H2NJWBGXF/lane1/LIB49749_RBA49240/fastq
 
-# sample ids for different experiments
+# sample groupings for different rules and subworkflows
 validation:   [11iv210ng, 11iv22ng, 8iv210ng, 8iv22ng, Sample10X]
+figure1: [tapk562deep, wtxk562deep]
+figure2: [TAP1, TAP2, WholeTx, Sample10X]
 screen:       [8iScreen1, 11iScreen1]
-tap_vs_whole: [WholeTx, TAP1, TAP2]
-re_tap_vs_whole: [re-wholetx, re11iv210ng]
-drop-seq:     [W4ea, T4ea]
 bone_marrow:  [TAPtotalBM, TAPkitBM, WholeTotalBM, WholeKitBM]
-mouse_mix:    [wtxmmix, wtxlung, tapmix, taplung]
-human_mix:    [19s005246, taphumanmix]
-chr8_reps:    [perturbchr8v2, perturbchr8alt1, perturbchr8alt2]
-l1000:        [perturbL1000, perturbL1000a, perturbL1000b, perturb10xWTX]
-chr11_deep:   [tapk562deep, wtxk562deep]
+tapseq_validation: [11iv210ng, 11iv22ng, 8iv210ng, 8iv22ng, Sample10X, wtxmmix, wtxlung, tapmix,
+                    taplung, taphumanmix, perturbchr8v2, perturbchr8alt1, perturbchr8alt2,
+                    perturbL1000, tapk562deep, wtxk562deep, W4ea, T4ea]
 
 # estimated number of cells per sample, for which dge data should be extracted.
 cell_numbers:
@@ -327,8 +324,14 @@ extract_dge:
 # step 4: analyses ---------------------------------------------------------------------------------
 downsample:
   reads_per_cell:
+    11iv210ng: [1000, 1500, 3500]
+    11iv22ng:  [1000, 1500, 3500]
+    8iv210ng:  [1000, 1500, 3500]
+    8iv22ng:   [1000, 1500, 3500]
     Sample10X: [1000, 1500, 3500, 5000, 10000, 15000, 20000]
-    tap-seq:   [1000, 1500, 3500]
+    TAP1: [250, 500, 1000, 2000, 2500]
+    TAP2: [250, 500, 1000, 2000, 2500]
+    WholeTx: [250, 500, 1000, 2000, 2500, 5000, 10000, 15000]
     re-wholetx:  [1000, 1500, 3500, 5000, 10000]
     re11iv210ng: [1000, 1500, 3500, 5000, 10000, 15000, 20000, 30000]
     DanielUnclear: [1000, 1500, 3500, 5000, 7000]
@@ -360,6 +363,9 @@ advanced_dge_downsampling:
     WholeKitBM:   "meta_data/target_gene_panels/target_genes_bone_marrow.csv"
     TAPtotalBM:   "meta_data/target_gene_panels/target_genes_bone_marrow.csv"
     TAPkitBM:     "meta_data/target_gene_panels/target_genes_bone_marrow.csv"
+    TAP1:    "meta_data/target_gene_panels/target_genes_validation_v2.csv"
+    TAP2:    "meta_data/target_gene_panels/target_genes_validation_v2.csv"
+    WholeTx: "meta_data/target_gene_panels/target_genes_validation_v2.csv"
 
 collapse_perturbations:
   targets:

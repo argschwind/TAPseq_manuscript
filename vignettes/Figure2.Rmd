@@ -27,9 +27,11 @@ require(Matrix)
 
 #Non-downsampled targeted seq data, 1.7Mb
 TAP.nods <- readRDS(url("http://steinmetzlab.embl.de/TAPdata//TAP.nods.RDS"))
+##this corresponds to the combination of ../data/TAP_DIFFEX_sample1/dge.txt and ../data/TAP_DIFFEX_sample2/dge.txt if the snakemake pipeline was run.
 
 #Matrix encoding perturbation identity for targeted seq experiment, 173kb
 TAP.per <-  t(readRDS(url("http://steinmetzlab.embl.de/TAPdata//TAP.per.RDS")))
+##this corresponds to the combination of ../data/TAP_DIFFEX_sample1/dge.txt and ../data/TAP_DIFFEX_sample2/dge.txt if the snakemake pipeline was run.
 
 #Non-downsampled whole transcriptome data, 272Mb
 Whole.nods <-  readRDS(url("http://steinmetzlab.embl.de/TAPdata//Whole.nods.RDS"))
@@ -39,25 +41,32 @@ Whole.per <- t(readRDS(url("http://steinmetzlab.embl.de/TAPdata//Whole.per.RDS")
 
 ```
 
-Data were downsampeld at the level of raw reads to realistically simulate a lower sequencing depth. The downsampling can be reproduced from the files provided on GEO using XXX; alternatively we provide the results:
+Data were downsampeld at the level of raw reads to realistically simulate a lower sequencing depth. All data processing  steps can be reproduced by running the rule Figure2 of https://github.com/argschwind/tapseq_manuscript (documented there); alternatively we provide the results:
 
 ```{sh downsampled, eval = F}
 
-mkdir data
+mkdir -p ../data/TAP_DIFFEX_sample1/downsampled
+mkdir -p ../data/TAP_DIFFEX_sample2/downsampled
+mkdir -p ../data/WTX_DIFFEX/downsampled
 
 #Downsampled targeted seq. data, 3.3 Mb
-wget http://steinmetzlab.embl.de/TAPdata//TAP.downsampled.zip
-unzip -j -d data/TAP.downsampled TAP.downsampled.zip
+wget http://steinmetzlab.embl.de/TAPdata/TAP1.downsampled.zip
+unzip -j -d ../data/TAP_DIFFEX_sample1/downsampled TAP1.downsampled.zip
+
+wget http://steinmetzlab.embl.de/TAPdata/TAP2.downsampled.zip
+unzip -j -d ../data/TAP_DIFFEX_sample2/downsampled TAP2.downsampled.zip
 
 #Downsampled whole transcriptome seq. data, 750 Mb
-wget http://steinmetzlab.embl.de/TAPdata//WholeTx.downsampled.zip
-unzip -j -d data/WholeTx.downsampled WholeTx.downsampled.zip
+wget http://steinmetzlab.embl.de/TAPdata/WholeTx.downsampled.zip
+unzip -j -d ../data/WTX_DIFFEX/downsampled WholeTx.downsampled.zip
+
+rm TAP1.downsampled.zip TAP2.downsampled.zip WholeTx.downsampled.zip
 ```
 
 Finally, data is re-sampled several times and differential expression testing is run. These results are expected to be available prior to running the remainder of this vignette; they can either be downloaded, or computed on a compute cluster with SLURM as job scheduler. Please run either option from the script below before running this vignette for the first time. This code will not be run automatically.
 
 ```{sh runDownsampledDE, eval =F}
-# Option 1: Download our results (Xxx Gb)
+# Option 1: Download our result
 mkdir runs
 
 wget http://steinmetzlab.embl.de/TAPdata//002_DESampled_MAST.cov.wholegenome.zip

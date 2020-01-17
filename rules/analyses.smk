@@ -92,40 +92,54 @@ rule tapseq_vs_cropseq:
   input:
     reads_on_target = "data/reads_on_target_validation_samples.csv",
     target_genes = "meta_data/target_gene_panels/target_genes_validation.csv",
-    dge = [expand("data/{sample}/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
-             sample = "Sample10X", rpc = config["downsample"]["reads_per_cell"]["Sample10X"]),
-           expand("data/{sample}/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
-             sample = ["11iv210ng", "11iv22ng", "8iv210ng", "8iv22ng"],
-             rpc = config["downsample"]["reads_per_cell"]["tap-seq"])]
+    dge = [expand("data/Sample10X/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+             rpc = config["downsample"]["reads_per_cell"]["Sample10X"]),
+           expand("data/11iv210ng/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+             rpc = config["downsample"]["reads_per_cell"]["11iv210ng"]),
+           expand("data/11iv22ng/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+             rpc = config["downsample"]["reads_per_cell"]["11iv22ng"]),
+           expand("data/8iv210ng/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+             rpc = config["downsample"]["reads_per_cell"]["8iv210ng"]),
+           expand("data/8iv22ng/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+             rpc = config["downsample"]["reads_per_cell"]["8iv22ng"])]
   output:
     "results/analyses/tapseq_vs_cropseq.html"
   conda: "../envs/r_analyses.yml"
   script:
     "../scripts/analyses/tapseq_vs_cropseq.Rmd"
-  
-# downsample dge data for TAP-seq validation
-rule downsample_dge_validation:
+    
+# filter mouse cell type mix data  (umi obs) for the 150 genes that are expressed in all cells
+rule filter_mmix:
   input:
-    dge = [expand("data/re-wholetx/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
-             rpc = config["downsample"]["reads_per_cell"]["re-wholetx"]),
-           expand("data/re11iv210ng/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
-             rpc = config["downsample"]["reads_per_cell"]["re11iv210ng"]),
-           expand("data/DanielUnclear/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
-             rpc = config["downsample"]["reads_per_cell"]["DanielUnclear"]),
-           expand("data/W4ea/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
-             rpc = config["downsample"]["reads_per_cell"]["W4ea"]),
-           expand("data/T4ea/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
-             rpc = config["downsample"]["reads_per_cell"]["T4ea"])]
-  
-# generate downsampled bone marrow datasets for cell type identification analyses
-rule downsample_dge_bone_marrow:
+    umi_obs = "data/{sample}/umi_observations.txt",
+    target_genes = "meta_data/target_gene_panels/target_genes_mouse_mix.csv"
+  output:
+    "data/{sample}/umi_obs_150_common_genes.txt"
+  conda: "../envs/r_analyses.yml"
+  script:
+    "../scripts/analyses/filter_mmix_umi_obs.R"
+
+# rule to downsample mouse cell type mix genic reads on the 150 common genes to the same sequencing
+# depth per sample and then extract dge data
+rule downsample_150_genes:
   input:
-    expand("data/{sample}/downsampled/dge_{reads}_avg_reads_per_cell_onGenes.txt",
-      sample = ["TAPtotalBM", "TAPkitBM"], reads = [100, 500, 1000, 1500, 2000, 2500, 5000, 5500]),
-    expand("data/{sample}/downsampled/dge_{reads}_avg_reads_per_cell_onGenes.txt",
-      sample = ["WholeTotalBM", "WholeKitBM"],
-      reads = [100, 500, 1000, 1500, 2000, 2500, 5000, 5500, 10000, 20000, 30000]),
-    "data/WholeTotalBM/downsampled/dge_50000_avg_reads_per_cell_onGenes.txt"
+    umi_obs = "data/{sample}/umi_obs_150_common_genes.txt",
+    whitelist = lambda wildcards: config["10x_cbc_whitelist"][wildcards.sample]
+  output:
+    dge = "data/{sample}/downsampled_150_genes/dge_{rpc}_avg_reads_per_cell.txt",
+    dge_stats = "data/{sample}/downsampled_150_genes/dge_{rpc}_avg_reads_per_cell_summary.txt",
+    tpt_hist = "data/{sample}/downsampled_150_genes/dge_{rpc}_avg_reads_per_cell_tpt_histogram.txt"
+  params:
+    reads = lambda wildcards: config["cell_numbers"][wildcards.sample] * int(wildcards.rpc),
+    tpt_threshold = config["extract_dge"]["tpt_threshold"],
+    whitelist_arg = lambda wildcards, input: get_whitelist_arg(input.whitelist),
+    seed = 20191220
+  log: "data/{sample}/logs/downsample_150_genes_{rpc}_avg_reads_per_cell.log"
+  conda: "../envs/dropseq_tools.yml"
+  shell:
+    "python scripts/processing/extract_dge.py -i {input.umi_obs} -o {output.dge} "
+    "{params.whitelist_arg} --sample {params.reads} --seed {params.seed} --tpt_threshold "
+    "{params.tpt_threshold} 2> {log}"
   
 # enhancer screen experiments ----------------------------------------------------------------------
 

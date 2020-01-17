@@ -32,10 +32,11 @@ region <- GRanges(seqnames = "chr11", ranges = IRanges(start = 5265000, end = 53
 
 ## Load required data
 
-Differential expression testing was performed for the data from the screen, see XXXX. The results are loaded into R. Gene-wise mean expression levels are also loaded.
+Differential expression testing was performed for the data from the screen. To generate these data, run the rule the rule enhancer_screen of https://github.com/argschwind/tapseq_manuscript . The results are loaded into R. Gene-wise mean expression levels are also loaded.
 
 ```{r loadData}
 hypotheses <- read.csv( url("http://steinmetzlab.embl.de/TAPdata/diff_expr_screen_nGenesCovar.csv"), header=T)
+#corresponds to ../data/diff_expr_screen_nGenesCovar.csv if the snakemake pipeline was run.
 ```
 
 Data from [Klann et al](https://www.ncbi.nlm.nih.gov/pubmed/28369033) for the FACS-based screen for HBE1 enhancers are also loaded. Coordinates were lifted to hg38 using liftOver.
@@ -49,18 +50,18 @@ charlie <- GRanges(charlie.hg38,mcols = data.frame(pval = ifelse(-log10(charlie$
 Finally, epigenome tracks are loaded from ENCODE.
 
 ```{sh download, eval=F}
-wget -O data/K562.K27ac3.fC.bigWig https://www.encodeproject.org/files/ENCFF779QTH/@@download/ENCFF779QTH.bigWig
-wget -O data/K562.K4me1.fC.bigWig https://www.encodeproject.org/files/ENCFF761XBZ/@@download/ENCFF761XBZ.bigWig
-wget -O data/K562.K4me3.fC.bigWig https://www.encodeproject.org/files/ENCFF712XRE/@@download/ENCFF712XRE.bigWig
-wget -O data/k562.polr2a.bigWig https://www.encodeproject.org/files/ENCFF321FZQ/@@download/ENCFF321FZQ.bigWig
+wget -O ../data/K562.K27ac3.fC.bigWig https://www.encodeproject.org/files/ENCFF779QTH/@@download/ENCFF779QTH.bigWig
+wget -O ../data/K562.K4me1.fC.bigWig https://www.encodeproject.org/files/ENCFF761XBZ/@@download/ENCFF761XBZ.bigWig
+wget -O ../data/K562.K4me3.fC.bigWig https://www.encodeproject.org/files/ENCFF712XRE/@@download/ENCFF712XRE.bigWig
+wget -O ../data/k562.polr2a.bigWig https://www.encodeproject.org/files/ENCFF321FZQ/@@download/ENCFF321FZQ.bigWig
 ```
 
 ```{r loadENCODE}
 marks <- list(
-  k27ac = rtracklayer::import("data/K562.K27ac3.fC.bigWig", which = region), #the name is wrong obviously there is no triacetylation
-  k4me1 = rtracklayer::import("data/K562.K4me1.fC.bigWig", which = region),
-  k4me3 = rtracklayer::import("data/K562.K4me3.fC.bigWig", which = region),
-  pol2 = rtracklayer::import("data/k562.polr2a.bigWig", which = region))
+  k27ac = rtracklayer::import("../data/K562.K27ac3.fC.bigWig", which = region), #the name is wrong obviously there is no triacetylation
+  k4me1 = rtracklayer::import("../data/K562.K4me1.fC.bigWig", which = region),
+  k4me3 = rtracklayer::import("../data/K562.K4me3.fC.bigWig", which = region),
+  pol2 = rtracklayer::import("../data/k562.polr2a.bigWig", which = region))
 
 ```
 

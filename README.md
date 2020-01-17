@@ -2,9 +2,11 @@
 
 This repository contains code to reproduce the results presented in the article. It builds upon a
 [snakemake](https://snakemake.readthedocs.io/en/stable/index.html#) workflow that handles all data
-processing from fastq files to transcript counts etc. It also performs various analyses, including
-additional QC analyses not part of the manuscript. Additional R vignettes for main figures only can
-be found in vignettes.
+processing from fastq files to transcript counts etc. It also performs some high-level analyses, in 
+particular analyses underlying figure 3 of the manuscript and quality control steps. 
+
+High level analyses underlying figures 1, 2, 3b,h,i and 4 are described in detail in the *vignettes* subfolder. Input data required for running these vignettes can either be produced by running the
+relevant parts of the snakemake pipeline, or they can be downloaded as described in the vignettes.  
 
 The workflow can be downloaded by simply cloning the repository into a location of choice:
 ```
@@ -33,32 +35,51 @@ However, some of these steps might take a very long time and use substantial fre
 Input data for the following thematic analyses can be procuced by executing following snakemake
 rules.
 
-#### TAP-seq validation
-All data used for TAP-seq validation can be reproduced by executing following snakemake rule. This
-creates all used digital gene expression data and subsamplings used to evaluate TAP-seq performance. 
+#### TAP-seq quality control (Figure 1)
+
+Key plots of figure 1 can be reproduced by running the Vignette for Figure1e,f. This requires the
+following data processing step:
 ```
-# align all TAP-seq validation data and create dge downsamplings (jobs = number of threads to use in
-# parallel, please adjust; n = dryrun, remove it to execute)
+# align all TAP-seq data for figure 1 and create dge downsamplings (jobs = number of threads to use
+# in parallel, please adjust; n = dryrun, remove it to execute)
+snakemake --use-conda Figure1 --jobs 4 -n
+```
+
+To obtain all data used for quality control, i.e. also the experiments detailed in supplementary
+figure 2-4 and the supplementary note, the following data processing step is required:
+```
+# create all input data for supplementary figures 2-4
 snakemake --use-conda tapseq_validation --jobs 4 -n
 ```
 
-#### Enhancer screen
+#### Evaluation of differential expression performance (Figure 2)
+
+The analyses underlyng figure 2 can be reproduced using the corresponding vignette. This requires
+the following data processing step; furthermore, it requires the execution of a relatively
+compute-expensive sampling and DE testing workflow, documented in the vignette.
+```
+# create all input data for figure 2
+snakemake --use-conda Figure2 --jobs 4 -n
+```
+
+
+#### Enhancer screen (Figure 3)
 Data and most analyses for the chromosome 8 and 11 enhancer screen can be reproduced with this
 command.
 ```
 snakemake --use-conda enhancer_screen --jobs 4 -n
 ```
 
-Code to reproduce the enhancer prediction analyses can be found in XXX. This requires generating
-chromatin annotated enhancer - target pairs. This can be achieved by running the following snakemake
-rule:
+Code to reproduce the enhancer prediction analyses can be found in the Vignette for Figure 3b,h,i.
+This requires generating chromatin annotated enhancer - target pairs. This can be achieved by
+running the following snakemake rule:
 ```
 snakemake --use-conda chromatin_annotated_etps --jobs 4 -n
 ```
 
-#### Bone marrow cell type identification
+#### Bone marrow cell type identification (Figure 4)
 Input data for mouse bone-marrow cell type identification analyses can be produced by this command.
-Downstream analyses to repoduce plots shown in the article are found in XXX.
+Downstream analyses to repoduce plots shown in the article are found in the Vignette for Figure 4.
 ```
 snakemake --use-conda bone_marrow_cell_types --jobs 4 -n
 ```
