@@ -7,3 +7,5 @@ data/
 results/
 cluster.yml
 snakehandler.sh
+*.DS_Store
+scripts/WIP/
