@@ -1,0 +1,629 @@
+---
+title: "Chromatin and Hi-C signatures of enhancer - target pairs (Figure 3f,g)"
+author: "Schraivogel, Gschwind et al."
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+options(bitmapType = "cairo")
+```
+
+This vignette reproduces the analysis in Figure 3f,g of Schraivogel, Gschwind, et al.
+
+## Data
+
+This analysis is based on the ehancer screen experiments. Candidate enhancers within 2 genomic
+regions on chromosome 8 and 11 were each targeted with 4 gRNA. TAP-seq was used to measure the
+expression levels of all genes within these regions.
+
+Differential gene expression analyses (MAST) was used to identify target genes of perturbed
+enhancers: Genes differentially expressed between cells with a given enhancer perturbation versus
+1000 randomly selected cells without that perturbation were considered target genes for that
+enhancer. All performed tests were corrected for multiple testing by calculating the false positive
+rate (FDR) and only enhancer - target pairs (ETPs) with an FDR below 0.05 were retained.
+
+The code for differential gene expression analyses can be found in
+*"scripts/analyses/differential_expression.R"* and
+*"scripts/analyses/process_de_results.R"*. Different models were explored and more analyses can
+be found in *"vignettes/Figure2.Rmd"*.
+
+Here the chromatin signatures and Hi-C interaction frequencies of inferred ETPs are investigated,
+which are shown in Figure 3f,g in the manuscript. Chromatin data are downloaded from
+[ENCODE](https://www.encodeproject.org/) and Hi-C data from
+[Rao et al., 2014](https://www.sciencedirect.com/science/article/pii/S0092867414014974?via%3Dihub).
+Chromatin and Hi-C data can be downloaded by running following snakemake rules from within the
+parent directory:
+```{bash, eval=FALSE}
+snakemake download_chromatin_data download_hic_data
+```
+
+All enhancer screen analyses can be performed by running:
+```{bash, eval=FALSE}
+snakemake --use-conda enhancer_screen
+```
+
+To reproduce the analyses in this vignette the differential expression results need to be imported:
+```{r loadDeResults}
+suppressPackageStartupMessages(library(tidyverse))
+
+# download differential gene expression output. if the snakemake workflow was executed, this file
+# can be found under 'data/diff_expr_screen_nGenesCovar.csv'
+de_output <- read.csv(url("http://steinmetzlab.embl.de/TAPdata/diff_expr_screen_nGenesCovar.csv"),
+                      stringsAsFactors = FALSE)
+
+# change sample id to a more meaningful name and add a variable for significant ETPs
+de_output <- de_output %>% 
+  mutate(sample = paste0("chr", sub("iScreen1", "", sample))) %>%
+  mutate(significant = if_else(pval_adj_allTests < 0.05, true = "sig", false = "non_sig"))
+```
+
+***
+
+## Chromatin activity of enhancers (Figure 3f)
+Chromatin assays from ENCODE were downloaded and the fold change over control signal is calculated
+for every assessed enhancer. Significant enhancers are then compared to non-significant enhancers
+with a similar distance to TSS distribution to identify enrichment of chromatin marks at
+functionally verified enhancers. More chromatin analyses can be found in
+*"scripts/analyses/chromatin_analyses_screen.Rmd"*.
+
+```{r loadPackages1}
+suppressPackageStartupMessages(library(ggpubr))
+suppressPackageStartupMessages(library(here))
+suppressPackageStartupMessages(library(GenomicRanges))
+suppressPackageStartupMessages(library(rtracklayer))
+```
+
+### Chromatin activity at enhancers
+The fold change over control signal of different enhancer and transcription relevant chromatin marks
+is computed for the enhancer of every tested enhancer - target gene pair.
+```{r chromAtEnhancers}
+# extract cis enhancer - gene pairs, remove significant pairs that increase gene expression
+cis_enh_perts <- de_output %>%
+  filter(enh_type == "cis", abs(dist_to_tss) >= 1000) %>%
+  filter(!(significant == "sig" & manual_lfc > 0))
+
+# only retain hits within the same target region (discard out of region control enhancers) and add
+# "chr" to enhancer chromosome for use with ENCODE data
+cis_enh_perts <- cis_enh_perts %>%
+  filter(enh_chr == sub("chr", "", sample)) %>%
+  mutate(enh_chr = paste0("chr", enh_chr),
+         gene_chr = paste0("chr", gene_chr))
+
+# get enhancer coordinates and convert to GRanges object
+enh_coords <- cis_enh_perts %>%
+  select(enh_chr, enh_start, enh_end, perturbation) %>%
+  distinct() %>%
+  makeGRangesFromDataFrame(keep.extra.columns = TRUE) %>%
+  `names<-`(.$perturbation)  # set names to perturbation id
+
+# bigWig files containing encode chromatin data
+chrom_assays <- c("H3K27ac",  "H3K4me1",  "H3K4me3", "H3K27me3", "POLR2A")
+chrom_files  <- here("data", "k562_chromatin_data",
+                     paste0(chrom_assays, "_encode_chipseq_fcOverCtrl.bigWig"))
+names(chrom_files) <- chrom_assays
+
+# load chromatin data for targeted genomic regions
+chrom_data <- lapply(chrom_files, FUN = import, which = range(enh_coords), format = "bigWig")
+
+# function to calculate average assay signal per enhancer
+avg_assay_signal <- function(assay, enh_coords) {
+  overlaps <- findOverlaps(enh_coords, assay)
+  overlaps <- split(overlaps, from(overlaps))
+  names(overlaps) <- names(enh_coords[as.numeric(names(overlaps))])
+  sapply(overlaps, function(x) {
+    sum(mcols(assay[to(x)])$score * width(assay[to(x)])) / sum(width(assay[to(x)]))
+  })
+}
+
+# calculate average chromatin signal at enhancers
+enh_chrom_signal <- chrom_data %>%
+  sapply(FUN = avg_assay_signal, enh_coords = enh_coords) %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "perturbation")
+  
+# transform to data.frame and merge with cis enhancer - gene pairs
+cis_enh_perts <- cis_enh_perts %>%
+  select(sample, perturbation, enh_chr, gene, pvalue, prop_grna_hits, dist_to_tss, significant) %>%
+  left_join(enh_chrom_signal, by = "perturbation")
+```
+
+### Normalize for distance to TSS
+Enhancers significantly associated with gene expression changes tend to be located in closer
+proximity to the target genes TSS than any enhancer to any gene on average. However, every enhancer
+has a large spectrum of distances to TSS to all tested genes within the region. To compare
+singificant to non-significant enhancers an negative control sample is generated by randomly
+sampling. For each significant enhancer - gene pair, three non-significant enhancer - gene pairs are
+drawn, whose enhancers have at least one gene with similar distance to TSS as the significant
+enhancer - gene pair. To ensure an independent control sample, pairs involing drawn enhancers are
+removed from subsequent sampling. This ensures that no enhancer appears more than once in the
+control sample. The number of drawn controls per significant pair is set to 3, because with higher
+numbers there are simply not enough non-significant enhancer - gene pairs available for sampling
+without duplicating enhancers.
+```{r drawCtrlsFunction}
+# function to randomly draw n non-significant pairs for a significant association. any enhancers
+# from drawn non-significant pairs are excluded from subsequent draws
+draw_control_pairs <- function(sig, non_sig, n = 3) {
+  
+  # get distance to tss bins for which a control pair needs to be drawn (repeat n times)
+  bins <- select(sig, enh_chr, dTSS_bin)
+  bins <- bins[rep(seq_len(nrow(bins)), each = n), ]
+  
+  # iteratively select a random negative control for each bin and remove any pairs involving that
+  # enhancer from pool of non-significant pairs for any subsequenct draws
+  random_ctrls <- data.frame()
+  for (i in seq_len(nrow(bins))) {
+    
+    # get pairs on same chromosome and same distance to TSS bin
+    nonSig_bin <- filter(non_sig, enh_chr == bins[i, "enh_chr"],
+                         dTSS_bin == bins[i, "dTSS_bin"])
+    
+    # randomly draw a control pair (if possible)
+    if (nrow(nonSig_bin)) {
+      
+      ctrl <- sample_n(nonSig_bin, size = 1)
+      random_ctrls <- rbind(random_ctrls, ctrl)
+      
+      # remove any pairs involving that enhancer from non_sig
+      non_sig <- filter(non_sig, perturbation != ctrl$perturbation)
+      
+    }else{
+      warning("Not enough unique enhancers to draw control!\n", call. = FALSE)
+    }
+  }
+  
+  return(random_ctrls)
+  
+}
+```
+
+```{r normalizeDistance}
+# create distance to TSS bins
+dtss_range <- range(cis_enh_perts$dist_to_tss)
+bins <- seq(from = dtss_range[1], to = dtss_range[2], by = 1e4)
+
+# bin distance to tss
+cis_enh_perts <- cis_enh_perts %>%
+  mutate(dTSS_bin = cut(dist_to_tss, bins))
+
+# extract significant enhancer - gene associations
+sig_pairs <- filter(cis_enh_perts, significant == "sig")
+
+# get other tested enhancer - gene pairs but whose enhancers appear only in non-sigificant tests
+nonSig_pairs <- cis_enh_perts %>%
+  filter(significant == "non_sig", !perturbation %in% sig_pairs$perturbation,
+         perturbation != "GATA1")  # no GATA1, because it's the only on chrX
+
+# randomly draw 3 control pairs for each significant enhancer - gene association
+set.seed(20190617)
+nonSig_ctrls <- draw_control_pairs(sig_pairs, non_sig = nonSig_pairs, n = 3)
+
+# combine significant and control pairs
+all_pairs <- bind_rows(sig_pairs, nonSig_ctrls)
+```
+
+### Chromatin activity vs confidence levels
+Enhancer - target pairs are classified as strong or weak ETPs based on the proportion of individual
+gRNAs confirming a given ETP. Chromatin activity of chromatin assays linked to active enhancers at
+are then compared between the confidence levels and non-significant controls.
+```{r chromMarksVsConf, warning=FALSE, fig.width=9, fig.height=3.5}
+# add label for confidence level based on prop gRNA hits
+all_pairs_conf <- all_pairs %>%
+  filter(!is.na(prop_grna_hits)) %>%
+  mutate(conf = if_else(significant == "sig" & prop_grna_hits >= 0.5,
+                        true = "High confidence", false = "Non significant"),
+         conf = if_else(significant == "sig" & prop_grna_hits < 0.5,
+                        true = "Low confidence", false = conf))
+
+# convert to long format for plot
+all_pairs_conf <- all_pairs_conf %>%
+  gather(key = "assay", value = "fc_over_ctrl", -c(1:8, dTSS_bin, conf))
+
+# perform kruskal-wallis test (non-parametric one-way anova) per assay and reformat adjusted p-value
+kw_tests <- compare_means(formula = fc_over_ctrl ~ conf, method = "kruskal.test",
+                          data = all_pairs_conf, group.by = "assay") %>%
+  mutate(p.adj.plot = if_else(p.adj < 0.001, true = "< 0.001",
+                              false = paste("=", round(p.adj, digits = 2)))) %>%
+  mutate(group1 = "High confidence", group2 = "Low confidence")  # add fake groups for text in plots
+
+# plot chromatin signal for high-, low-confidence and non significant enhancer - gene pairs
+all_pairs_conf %>%
+  filter(assay != "H3K27me3") %>%
+  ggplot(., aes(x = conf, y = fc_over_ctrl + 1, fill = conf)) +
+  facet_wrap(~assay, ncol = 4) +
+  geom_boxplot(notch = TRUE) +
+  stat_pvalue_manual(data = filter(kw_tests, assay != "H3K27me3"), y.position = 130, size = 5.5,
+                     label = "P adj. {p.adj.plot}", remove.bracket = TRUE, inherit.aes = FALSE) +
+  labs(y = "FC over control") +
+  scale_x_discrete(labels = c("Strong ETP", "Weak ETP", "NS")) +
+  scale_fill_manual(values = c("High confidence" = "goldenrod2",
+                               "Low confidence" = "darkslategray3", "Non significant" = "gray")) +
+  scale_y_log10(limits = c(NA, 180)) +
+  theme_bw() +
+  theme(axis.title.x = element_blank(), legend.position = "none", text = element_text(size = 20),
+        panel.grid = element_blank(), axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+H3K27me3 is associated with inactive chromatin and is not enriched at the discovered enhancers:
+```{r chromMarksVsConfH3K27me3, warning=FALSE, fig.width=2.8, fig.height=3.5}
+# plot H3K27me3 vs confidence levels
+all_pairs_conf %>%
+  filter(assay == "H3K27me3") %>%
+  ggplot(., aes(x = conf, y = fc_over_ctrl + 1, fill = conf)) +
+  facet_wrap(~assay) +
+  geom_boxplot(notch = TRUE) +
+  stat_pvalue_manual(data = filter(kw_tests, assay == "H3K27me3"), y.position = 8.7, size = 5.5,
+                     label = "P adj. {p.adj.plot}", remove.bracket = TRUE, inherit.aes = FALSE) +
+  labs(y = "FC over control") +
+  scale_x_discrete(labels = c("Strong ETP.", "Weak ETP", "NS")) +
+  scale_fill_manual(values = c("High confidence" = "goldenrod2",
+                               "Low confidence" = "darkslategray3", "Non significant" = "gray")) +
+  scale_y_log10(limits = c(NA, 10)) +
+  theme_bw() +
+  theme(axis.title.x = element_blank(), legend.position = "none", text = element_text(size = 20),
+        panel.grid = element_blank(), axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+***
+
+## Hi-C interaction frequencies of ETPs (Figure 3g)
+
+```{r loadPackages2}
+suppressPackageStartupMessages(library(ggpubr))
+suppressPackageStartupMessages(library(here))
+suppressPackageStartupMessages(library(HiTC))
+suppressPackageStartupMessages(library(Matrix))
+suppressPackageStartupMessages(library(rtracklayer))
+suppressPackageStartupMessages(library(tools))
+```
+
+### Liftover ETPs
+Hi-C data was aligned to human hg19, so enhancer and gene coordinates have to be lifted over from
+hg38 to hg19.
+```{r liftOverETPs, message=FALSE}
+# extract cis-interactions, remove validation controls on other chromosomes than the samples'
+# target region and remove significant hits that increase gene expression
+cis_enh_perts <- de_output %>%
+  filter(enh_type == "cis", abs(dist_to_tss) >= 1000) %>%
+  mutate(enh_chr = paste0("chr", enh_chr), gene_chr = paste0("chr", gene_chr)) %>% 
+  filter(sample == enh_chr) %>%
+  filter(!(significant == "sig" & manual_lfc > 0))
+
+# download chain file for hg38 to hg19 liftover
+chain_url <- "http://hgdownload.cse.ucsc.edu/goldenPath/hg38/liftOver/hg38ToHg19.over.chain.gz"
+chain_file <- tempfile("hg38ToHg19", fileext = ".gz")
+download.file(chain_url, chain_file)
+system(paste("gunzip", chain_file))
+
+# import chain file
+hg38_to_hg19_chain <- import.chain(file_path_sans_ext(chain_file))
+
+# extract hg38 enhancer coordinates
+enh_coords_hg38 <- cis_enh_perts %>%
+  select(perturbation, enh_chr, enh_start, enh_end) %>%
+  distinct() %>%
+  makeGRangesFromDataFrame(keep.extra.columns = TRUE, seqnames.field = "enh_chr",
+                           start.field = "enh_start", end.field = "enh_end")
+
+# liftover enhancers from hg38 to hg19 and convert to data.frame
+enh_coords_hg19 <- enh_coords_hg38 %>%
+  liftOver(chain = hg38_to_hg19_chain) %>%
+  unlist() %>%
+  as.data.frame() %>%
+  select(seqnames, start, end, perturbation) %>%
+  dplyr::rename(enh_chr = seqnames, enh_start = start, enh_end = end)
+
+# replace tested enhancer - gene pairs hg38 enhancer coordinates with hg19 coordinates
+cis_enh_perts <- cis_enh_perts %>%
+  select(-c(enh_chr, enh_start, enh_end)) %>%
+  left_join(enh_coords_hg19, by = "perturbation")
+
+# extract gene TSS coordinates
+gene_tss_hg38 <- cis_enh_perts %>%
+  select(gene, gene_chr, gene_tss, gene_strand) %>%
+  distinct() %>%
+  makeGRangesFromDataFrame(keep.extra.columns = TRUE, seqnames.field = "gene_chr",
+                           start.field = "gene_tss", end.field = "gene_tss",
+                           strand.field = "gene_strand")
+
+# liftover tss coordinates to hg19
+gene_tss_hg19 <- gene_tss_hg38 %>%
+  liftOver(chain = hg38_to_hg19_chain) %>%
+  unlist() %>%
+  as.data.frame() %>%
+  select(seqnames, start, strand, gene) %>%
+  dplyr::rename(gene_chr = seqnames, gene_tss = start, gene_strand = strand)
+
+# replace gene tss hg38 coordinates with hg19 coordinates
+cis_enh_perts <- cis_enh_perts %>%
+  select(-c(gene_chr, gene_tss, gene_strand)) %>%
+  left_join(gene_tss_hg19, by = "gene")
+
+# recalculate distance to tss for hg19 coordinates
+cis_enh_perts <- cis_enh_perts %>%
+  mutate(enh_center = round((enh_start + enh_end) / 2)) %>%
+  mutate(dist_to_tss = if_else(gene_strand == "+", true  = enh_center - gene_tss,
+                                false = gene_tss - enh_center)) %>%
+  select(-enh_center)
+
+# add label for confidence level based on prop gRNA hits
+cis_enh_perts <- cis_enh_perts %>%
+  filter(!is.na(prop_grna_hits)) %>%
+  mutate(conf = case_when(
+    significant == "non_sig" ~ "NS",
+    significant == "sig" & prop_grna_hits >= 0.5 ~ "Strong",
+    significant == "sig" & prop_grna_hits <  0.5 ~ "Weak")
+  )
+```
+
+### Prepare Hi-C data
+Hi-C data for k562 cells from Rao et al. 2014 is imported (5kb resolution). The provided
+normalization vectors are used to normalize the observed contacts (read counts). Data from the two
+chromosonal regions on chromosome 8 and 11 is extracted for any further analyses.
+```{r HiCimportFunction}
+# function to import HiC data from Rao et al for one chromosome and create a HTCexp object
+import_hic <- function(sparse_cm_file, chromosome, resolution, bins) {
+  
+  # load sparse contact matrix file (only observed contacts)
+  obs_contacts <- read.table(sparse_cm_file, col.names = c("i", "j", "M_ij"), sep = "\t")
+  
+  # get starting coordinates of assessed genomic bins at 5kb resolution
+  max_bin <- (bins - 1) * resolution
+  bin_starts <- seq(from = 0, to = max_bin, by = resolution)
+  
+  # create GRanges object containing all assessed bins for that chromosome
+  bin_coords <- GRanges(seqnames = chromosome,
+                        ranges = IRanges(start = bin_starts, end = bin_starts + resolution - 1,
+                                         names = paste0("bin_", seq_len(length(bin_starts))))
+                        )
+  
+  # convert starting coordinates of bins in sparse matrix input to bin ids by dividing by the
+  # resolution (and add 1 to get correct index)
+  obs_contacts_bins <- data.frame(i = round(obs_contacts$i / resolution + 1),
+                                  j = round(obs_contacts$j / resolution + 1), 
+                                  M_ij = obs_contacts$M_ij)
+  
+  # create sparse contact matrix from observed contacts
+  sparse_cm <- sparseMatrix(i = obs_contacts_bins$i, j = obs_contacts_bins$j,
+                            x = obs_contacts_bins$M_ij, symmetric = TRUE, dims = c(bins, bins))
+  
+  # create HTCexp object containing data for the given chromosome
+  HTCexp(intdata = sparse_cm, xgi = bin_coords, ygi = bin_coords)
+  
+}
+```
+
+```{r importHiC}
+# directory containing downloaded Hi-C data
+hic_dir <- "data/k562_chromatin_data/HiC/5kb_resolution_intrachromosomal"
+
+# k562 intrachromosomal sparse matrix files for chromosomes 8 and 11
+chr8_scm_file  <- here(hic_dir, "chr8/MAPQG0/chr8_5kb.RAWobserved")
+chr11_scm_file <- here(hic_dir, "chr11/MAPQG0/chr11_5kb.RAWobserved")
+
+# import normalization vectors
+chr8_KRnorm  <- as.numeric(readLines(here(hic_dir, "chr8/MAPQG0/chr8_5kb.KRnorm")))
+chr11_KRnorm <- as.numeric(readLines(here(hic_dir, "chr11/MAPQG0/chr11_5kb.KRnorm")))
+
+# infer number of bins per chromosome based on the normalization vectors
+chr8_bins  <- length(chr8_KRnorm)
+chr11_bins <- length(chr11_KRnorm)
+
+# import hi-c data for these chromosomes
+chr8_hic  <- import_hic(chr8_scm_file,  chromosome = "chr8",  resolution = 5000, bins = chr8_bins)
+chr11_hic <- import_hic(chr11_scm_file, chromosome = "chr11", resolution = 5000, bins = chr11_bins)
+```
+
+```{r normalizeHiC}
+# function to normalize Hi-C data based on provided normalization vectors
+normalize_hic <- function(htc_obj, norm_vector) {
+  
+  # extract raw observed interaction matrix
+  raw_obs <- intdata(htc_obj)
+  
+  # create normalization matrix by computing the outer product of the normalization vector
+  norm_mat <- outer(norm_vector, norm_vector)
+  
+  # multiply observed interactions by normalization matrix and add back to HTC object
+  intdata(htc_obj) <- raw_obs / norm_mat
+  return(htc_obj)
+  
+}
+
+# normalize HiC data
+chr8_hic_norm  <- normalize_hic(chr8_hic,  norm_vector = chr8_KRnorm)
+chr11_hic_norm <- normalize_hic(chr11_hic, norm_vector = chr11_KRnorm)
+```
+
+```{r extractHiCregions}
+# infer chromosomal region range
+region_coords <- cis_enh_perts %>%
+  select(sample, enh_start, enh_end, gene_tss) %>%
+  gather(key = "key", value = "coord", -sample) %>%
+  group_by(sample) %>%
+  summarize(start = min(coord), end = max(coord))
+
+# calculate bin coordinates that contain the entire regions
+region_bins <- region_coords %>%
+  mutate(start = floor(start / 5000) * 5000,
+         end = ceiling(end / 5000) * 5000)
+
+# extract data for assessed regions
+chr8_region_hic <- extractRegion(chr8_hic_norm, MARGIN = c(1, 2), chr = "chr8",
+                                 from = pull(filter(region_bins, sample == "chr8"), start),
+                                 to = pull(filter(region_bins, sample == "chr8"), end))
+
+chr11_region_hic <- extractRegion(chr11_hic_norm, MARGIN = c(1, 2), chr = "chr11",
+                                  from = pull(filter(region_bins, sample == "chr11"), start),
+                                  to = pull(filter(region_bins, sample == "chr11"), end))
+```
+
+### Enhancer - gene pairs versus expected interaction frequency over distance
+Loci that are in close proximity have a higher expected interaction frequency than loci further from
+each other. To take this into account, the expected background interaction frequency is computed by
+looking at the interaction frequencies of all assessed genomic bins within the genomic regions. The
+interaction frequency of all bins as a function of the distance between bins is defined as the
+expected background of interactions.
+```{r background}
+# function to extract interaction frequency versus distance between genomic bins
+intFreq_over_distance <- function(htc_obj, type = "background") {
+ 
+  # extract interaction matrix and compute distances between bins (in bp)
+  ints <- intdata(htc_obj)
+  dists <- intervalsDist(htc_obj)
+
+  # get unique interactions (upper triangle of matrix, including diagonal), because matrix is
+  # symmetric
+  ints_unique <- suppressMessages(ints[upper.tri(ints, diag = TRUE)])
+  dists_unique <- suppressMessages(dists[upper.tri(dists, diag = TRUE)])
+
+  # create data.frame containing interaction frequency across all in distances
+  int_over_dist <- data.frame(dist = dists_unique, int_freq = ints_unique, type = type,
+                              stringsAsFactors = FALSE)
+  
+  # sort according to distance
+  int_over_dist[order(int_over_dist$dist), ]
+   
+}
+
+# compute expected background interaction frequency by calculating the distance between all observed
+# genomic bins
+chr8_int_over_dist  <- intFreq_over_distance(chr8_region_hic)
+chr11_int_over_dist <- intFreq_over_distance(chr11_region_hic)
+
+# combine into one data.frame and remove any NaN values, which were introduced because the
+# normalization failed for certain bins
+expect_int <- bind_rows(chr8 = chr8_int_over_dist, chr11 = chr11_int_over_dist, .id = "sample") %>%
+  filter(!is.nan(int_freq))
+```
+
+The interaction frequency of all tested enhancer - gene pair computed, defined as the interaction
+frequency of the genomic bins overlapping the enhancer and the target genes TSS.
+```{r intFreqFun}
+# function to compute the interaction frequency for enhancer - gene pairs, by finding the hi-c 
+# genomic bins with overlap with the enhancer and the target gene tss. the interaction frequency of
+# the pair is then defined as the interaction frequency of these bins
+compute_int_freq <- function(pairs, htc_object) {
+
+  # add pair identifier
+  pairs$pair <- seq_len(nrow(pairs))
+  
+  # get coordinates of enhancer centers as GRanges object
+  enh_coords <- pairs %>%
+    mutate(enh_center = round((enh_start + enh_end) / 2)) %>%
+    select(enh_chr, enh_center) %>%
+    makeGRangesFromDataFrame(., seqnames.field = "enh_chr", start.field = "enh_center",
+                             end.field = "enh_center")
+  
+  # get gene tss coordinates as GRanges object
+  tss_coords <- pairs %>%
+    select(gene_chr, gene_tss) %>%
+    makeGRangesFromDataFrame(., seqnames.field = "gene_chr", start.field = "gene_tss",
+                             end.field = "gene_tss")
+  
+  # get bins overlapping for all enhancers and gene tss
+  hic_bins <- x_intervals(htc_object)
+  enh_bins <- findOverlaps(query = enh_coords, subject = hic_bins)
+  tss_bins <- findOverlaps(query = tss_coords, subject = hic_bins)
+  
+  # combine into one data.frame
+  enh_bins <- data.frame(pair = from(enh_bins), enh_bin = to(enh_bins))
+  tss_bins <- data.frame(pair = from(tss_bins), tss_bin = to(tss_bins))
+  bins <- full_join(enh_bins, tss_bins, by = "pair")
+  
+  # extract distance matrix between bins from htc object
+  dists <- intervalsDist(htc_object)
+  
+  # calculate distances between bins of enhancer gene pairs
+  dist_pairs <- dists[as.matrix(bins[, 2:3])]
+  dist_pairs <- data.frame(pair = bins$pair, dist_bins = dist_pairs)
+
+  # extract hi-c interaction matrix from htc object
+  intdata <- intdata(htc_object)
+  
+  # get interaction frequencies for all bins and add pair id
+  int_freq_pairs <- intdata[as.matrix(bins[, 2:3])]
+  int_freq_pairs <- data.frame(pair = bins$pair, int_freq = int_freq_pairs)
+  
+  # add interaction frequencies and bin distances to pairs to create output
+  pairs %>%
+    left_join(dist_pairs, by = "pair") %>%
+    left_join(int_freq_pairs, by = "pair") %>%
+    select(-pair)
+
+}
+```
+
+```{r intFreqPairs}
+# compute interaction frequencies for all tested enhancer - gene pairs
+chr8_pairs <- cis_enh_perts %>%
+  filter(enh_chr == "chr8", enh_chr == "chr8") %>%
+  compute_int_freq(., htc_object = chr8_region_hic)
+
+chr11_pairs <- cis_enh_perts %>%
+  filter(enh_chr == "chr11", enh_chr == "chr11") %>%
+  compute_int_freq(., htc_object = chr11_region_hic)
+
+# combine into one data.frame and extract relevant columns
+int_freq_pairs <- bind_rows(chr8_pairs, chr11_pairs) %>%
+  select(sample, dist_bins, int_freq, significant, conf) %>%
+  dplyr::rename(dist = dist_bins, type = significant)
+
+# add to expected background frequencies
+int_freqs <- expect_int %>%
+  mutate(conf = as.character(NA)) %>%
+  bind_rows(int_freq_pairs)
+```
+
+The interaction frequencies for all ETPs and background are plotted as a function of the distance
+on the linear genome:
+```{r plotIntFreq, fig.width=8, fig.height=4}
+# add an amount equal to bin size to distance for plotting on log10 scale and reformat labels
+int_freqs_plot <- int_freqs %>%
+  mutate(dist = dist + 5000) %>%
+  mutate(sample = sub("c", "C", sample)) %>% 
+  mutate(conf = fct_relevel(conf, "Strong", "Weak", "NS"))
+
+# plot interaction frequencies across confidence levels and significant vs non-significant
+p1 <- ggplot(drop_na(int_freqs_plot), aes(x = conf, y = int_freq + 1, color = conf)) +
+  geom_jitter(width = 0.2, size = 2.5) +
+  geom_boxplot(color = "black", outlier.shape = NA, fill = NA) +
+  labs(y = "Hi-C Interaction frequency", color = "Confidence:") +
+  scale_color_manual(values = c("Strong" = "goldenrod2", "Weak" = "darkslategray3",
+                                "NS" = "gray")) +
+  scale_y_log10(limits = c(NA, 1200), breaks = c(1, 10, 100, 1000)) +
+  theme_bw() +
+  theme(text = element_text(size = 20), panel.grid = element_blank(),
+        axis.title.x = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1, size = 14.5))
+
+# plot interaction frequency as a function of distance
+x_breaks <- c(0, 10^(4:10))  # breaks to draw on x axis (without added bin distance!)
+p2 <- ggplot(int_freqs_plot, aes(x = dist, y = int_freq + 1)) +
+  geom_point(data = filter(int_freqs_plot, type == "background"), pch = 4, size = 2,
+             color = "black", alpha = 1) +
+  geom_point(data = filter(int_freqs_plot, type == "non_sig"), aes(color = conf), alpha = 1,
+             size = 2.5) +
+  geom_point(data = filter(int_freqs_plot, type == "sig"), aes(color = conf), size = 2.5) +
+  geom_smooth(data = filter(int_freqs_plot, type != "sig"), aes(linetype = type),
+              color = "indianred3", se = FALSE, lwd = 2) +
+  labs(x = "Distance (kb)", y = "Hi-C Interaction frequency", color = "Confidence",
+       linetype = "Type") +
+  scale_color_manual(values = c("Strong" = "goldenrod2", "Weak" = "darkslategray3",
+                                "NS" = "gray")) +
+  scale_x_log10(breaks = x_breaks + 5000, labels = scales::comma(x_breaks / 1000)) +
+  scale_y_log10(limits = c(NA, 1200), breaks = c(1, 10, 100, 1000)) +
+  theme_bw() +
+  theme(text = element_text(size = 20), panel.grid = element_blank())
+
+# arrange plots with common legend (props ggpubr!)
+ggarrange(p1, p2 + theme(axis.title.y = element_blank()), ncol = 2, nrow = 1, common.legend = TRUE,
+          legend = "top", widths = c(1, 2))
+```
+
+***
+
+## R Session information
+```{r echo=FALSE}
+sessionInfo()
+```

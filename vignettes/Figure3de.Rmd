@@ -1,0 +1,162 @@
+---
+title: "Enhancer - target gene properties (Figure 3d,e)"
+author: "Schraivogel, Gschwind et al."
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+options(bitmapType = "cairo")
+```
+
+This vignette reproduces the analysis in Figure 3d,e of Schraivogel, Gschwind, et al.
+
+## Data
+
+This analysis is based on the ehancer screen experiments. Candidate enhancers within 2 genomic
+regions on chromosome 8 and 11 were each targeted with 4 gRNA. TAP-seq was used to measure the
+expression levels of all genes within these regions.
+
+Differential gene expression analyses (MAST) was used to identify target genes of perturbed
+enhancers: Genes differentially expressed between cells with a given enhancer perturbation versus
+1000 randomly selected cells without that perturbation were considered target genes for that
+enhancer. All performed tests were corrected for multiple testing by calculating the false positive
+rate (FDR) and only enhancer - target pairs (ETPs) with an FDR below 0.05 were retained.
+
+The code for differential gene expression analyses can be found in
+*"scripts/analyses/differential_expression.R"* and
+*"scripts/analyses/process_de_results.R"*. Different models were explored and more analyses can
+be found in *"vignettes/Figure2.Rmd"*.
+
+All enhancer screen analyses can be performed by running:
+```{bash, eval=FALSE}
+snakemake --use-conda enhancer_screen
+```
+
+The following data is required to reproduce the analysis in this vignette:
+```{r loadData}
+suppressPackageStartupMessages(library(knitr))
+suppressPackageStartupMessages(library(tidyverse))
+
+# download differential gene expression output. if the snakemake workflow was executed, this file
+# can be found under 'data/diff_expr_screen_nGenesCovar.csv'
+de_output <- read.csv(url("http://steinmetzlab.embl.de/TAPdata/diff_expr_screen_nGenesCovar.csv"),
+                      stringsAsFactors = FALSE)
+
+# change sample id to a more meaningful name and add a variable for significant ETPs
+de_output <- de_output %>% 
+  mutate(sample = paste0("Chr", sub("iScreen1", "", sample))) %>%
+  mutate(significant = if_else(pval_adj_allTests < 0.05, true = "sig", false = "non_sig"))
+```
+
+***
+
+## Number of cis-enhancers per gene (Figure 3d)
+Cis enhancer gene pairs are extracted by selecting pairs within the same regions and at least 1kb
+away from the target genes TSS. Furthermore, any significant hits that lead to an increase in
+expression of their target genes are filtered out, as they probably act through alternative
+mechanisms. The number of cis-enhancers per gene are counted and plotted.
+```{r enhPerGene, fig.width=5, fig.height=5}
+# extract cis enhancer - gene pairs and remove significant pairs that increase gene expression
+cis_enh_perts <- de_output %>%
+  filter(enh_type == "cis", abs(dist_to_tss) >= 1000) %>%
+  filter(!(significant == "sig" & manual_lfc > 0))
+
+# only retain hits within the same target region (discard out of region control enhancers)
+cis_enh_perts <- cis_enh_perts %>%
+  filter(enh_chr == sub("Chr", "", sample))
+
+# count the number of enhancers for each gene
+enh_per_gene <- cis_enh_perts %>%
+  group_by(sample, gene) %>%
+  summarize(enh = sum(significant == "sig"))
+
+# compute proportion of genes with at least one discovered enhancer
+prop_with_enh <- enh_per_gene %>%
+  summarize(enh = sum(enh > 0),
+            genes = n(),
+            prop_genes_with_enh = round(enh / genes, digits = 2))
+
+# print table
+kable(prop_with_enh)
+
+# compute number of genes per enhancer count
+enh_counts <- enh_per_gene %>%
+  filter(enh > 0) %>%
+  group_by(sample, enh) %>%
+  summarize(genes = n()) %>%
+  spread(key = "sample", value = "genes", fill = 0) %>%
+  gather(key = "sample", value = "genes", -enh)
+
+# plot number of genes per enhancer count
+ggplot(enh_counts, aes(x = factor(enh, levels = seq_len(max(enh))), y = genes, fill = sample)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(x = "Enhancers", y = "Genes",
+       fill = "Region:") +
+  scale_fill_manual(values = c("Chr11" = "indianred3", "Chr8" = "steelblue")) +
+  scale_x_discrete(drop = FALSE) +
+  theme_bw() +
+  theme(text = element_text(size = 25), panel.grid = element_blank(),
+        legend.position = c(0.8, 0.85))
+```
+
+***
+
+## P-value vs distance to TSS (Figure 3e)
+The negative log10 p-value is plotted as function of distance to TSS to show that strong
+associations (high -log10 p-value) are located close to their target genes TSS. The proportion of
+individual gRNAs confirming an ETP are used to assign a confidence level to each ETP.
+```{r assocVsDist, fig.width=8, fig.height=5}
+# calculate -log10 p-value
+cis_enh_perts <- mutate(cis_enh_perts, neg_log10_pvalue = -log10(pvalue))
+
+# set gRNA hits to NA for non-significant hits
+cis_enh_perts_plot <- cis_enh_perts %>%
+  mutate(grna_hits = if_else(significant != "sig", true = as.integer(NA), false = grna_hits),
+         prop_grna_hits = if_else(significant != "sig", true = as.numeric(NA),
+                                  false = prop_grna_hits))
+
+# plot decay of association strength over distance within 1Mb of TSS
+p1 <- ggplot(cis_enh_perts_plot, aes(x = abs(dist_to_tss) / 1e6, y = neg_log10_pvalue,
+                                     color = prop_grna_hits)) +
+    labs(x = "Distance to TSS (Mb)", y = expression(-log[10] ~ p - value),
+         color = "Confidence") +
+    geom_point(data = filter(cis_enh_perts_plot, significant == "non_sig"), size = 3.5) +
+    geom_point(data = filter(cis_enh_perts_plot, significant == "sig"), size = 3.5) +
+    scale_color_gradient(low = "blue", high = "orangered", na.value = "gray69") +
+    theme_bw() +
+    theme(text = element_text(size = 25), panel.grid = element_blank())
+
+# same plot, but with logarithmic distance
+p2 <- ggplot(cis_enh_perts_plot, aes(x = abs(dist_to_tss) / 1e6, y = neg_log10_pvalue,
+                                     color = prop_grna_hits)) +
+    geom_smooth(data = filter(cis_enh_perts_plot, significant == "sig"),
+                method = "loess", se = FALSE, color = "black", lwd = 2) +
+    labs(x = "Distance to TSS (Mb)", y = expression(-log[10] ~ p - value)) +
+    geom_point(data = filter(cis_enh_perts_plot, significant == "non_sig"), size = 2.5) +
+    geom_point(data = filter(cis_enh_perts_plot, significant == "sig"), size = 2.5) +
+    scale_x_log10(breaks = c(0.01, 0.1, 1, 10), labels = c("0.01", "0.1", "1", "10")) +
+    scale_color_gradient(low = "blue", high = "orangered", na.value = "gray69") +
+    theme_bw() +
+    theme(text = element_text(size = 20), axis.title = element_blank(), legend.position = "none",
+          panel.grid = element_blank(), plot.background = element_rect(fill = NA))
+
+# add logarithmic plot as inset of linear plot
+p1 + 
+  annotation_custom(
+    grob = ggplotGrob(p2),
+    xmin = 18,
+    xmax = 56,
+    ymin = 40,
+    ymax = 122
+  )
+```
+
+More enhancer analyses can be found in *"scripts/analyses/map_enhancers.Rmd"*.
+
+***
+
+## R Session information
+```{r echo=FALSE}
+sessionInfo()
+```
