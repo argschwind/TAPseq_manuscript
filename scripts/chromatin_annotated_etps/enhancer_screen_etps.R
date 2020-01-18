@@ -184,24 +184,24 @@ import_hic <- function(sparse_cm_file, chromosome, resolution, bins) {
 }
 
 # k562 intrachromosomal sparse matrix and krnorm vector files for chromosomes 8 and 11
-scm_files <- snakemake@input$hic_raw
+scm_files <- here(snakemake@input$hic_raw)
 names(scm_files) <- sub("_5kb.RAWobserved", "", basename(scm_files))
 
-krnorm_files <- snakemake@input$hic_norm
+krnorm_files <- here(snakemake@input$hic_norm)
 names(krnorm_files) <- sub("_5kb.KRnorm", "", basename(krnorm_files))
 
 # import normalization vectors
-chr8_KRnorm  <- as.numeric(readLines(here(krnorm_files["chr8"])))
-chr11_KRnorm <- as.numeric(readLines(here(krnorm_files["chr11"])))
+chr8_KRnorm  <- as.numeric(readLines(krnorm_files["chr8"]))
+chr11_KRnorm <- as.numeric(readLines(krnorm_files["chr11"]))
 
 # infer number of bins per chromosome based on the normalization vectors
 chr8_bins  <- length(chr8_KRnorm)
 chr11_bins <- length(chr11_KRnorm)
 
 # import hi-c data for these chromosomes
-chr8_hic  <- import_hic(here(scm_files["chr8"]),  chromosome = "chr8", resolution = 5000,
+chr8_hic  <- import_hic(scm_files["chr8"],  chromosome = "chr8", resolution = 5000,
                         bins = chr8_bins)
-chr11_hic <- import_hic(here(scm_files["chr11"]), chromosome = "chr11", resolution = 5000,
+chr11_hic <- import_hic(scm_files["chr11"], chromosome = "chr11", resolution = 5000,
                         bins = chr11_bins)
 
 # function to normalize Hi-C data based on provided normalization vectors

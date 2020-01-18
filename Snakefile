@@ -61,23 +61,23 @@ rule all:
         rpc = config["downsample"]["reads_per_cell"]["T4ea"]),
       expand("data/Sample10X/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
         rpc = config["downsample"]["reads_per_cell"]["Sample10X"]),
-      expand("data/TAP1/downsampled/dge_{rpc}_avg_reads_per_cell_onGenes.txt",
+      expand("data/TAP1/downsampled/dge_{rpc}_avg_reads_per_cell_onGenes.txt.gz",
         rpc = config["downsample"]["reads_per_cell"]["TAP1"]),
-      expand("data/TAP2/downsampled/dge_{rpc}_avg_reads_per_cell_onGenes.txt",
+      expand("data/TAP2/downsampled/dge_{rpc}_avg_reads_per_cell_onGenes.txt.gz",
         rpc = config["downsample"]["reads_per_cell"]["TAP2"]),
-      expand("data/WholeTx/downsampled/dge_{rpc}_avg_reads_per_cell_onGenes.txt",
+      expand("data/WholeTx/downsampled/dge_{rpc}_avg_reads_per_cell_onGenes.txt.gz",
         rpc = config["downsample"]["reads_per_cell"]["WholeTx"]),
       expand("data/taplung/downsampled_150_genes/dge_{rpc}_avg_reads_per_cell.txt",
         rpc = [1000, 1500, 3500, 5000, 10000, 15000, 20000, 40000]),
       expand("data/tapmix/downsampled_150_genes/dge_{rpc}_avg_reads_per_cell.txt",
         rpc = [1000, 1500, 3500, 5000, 10000, 15000, 20000, 40000, 80000, 150000]),
-      expand("data/{sample}/downsampled/dge_{reads}_avg_reads_per_cell_onGenes.txt",
+      expand("data/{sample}/downsampled/dge_{rpc}_avg_reads_per_cell_onGenes.txt.gz",
         sample = ["TAPtotalBM", "TAPkitBM"],
-        reads = [100, 500, 1000, 1500, 2000, 2500, 5000, 5500]),
-      expand("data/{sample}/downsampled/dge_{reads}_avg_reads_per_cell_onGenes.txt",
+        rpc = [100, 500, 1000, 1500, 2000, 2500, 5000, 5500]),
+      expand("data/{sample}/downsampled/dge_{rpc}_avg_reads_per_cell_onGenes.txt.gz",
         sample = ["WholeTotalBM", "WholeKitBM"],
-        reads = [100, 500, 1000, 1500, 2000, 2500, 5000, 5500, 10000, 20000, 30000]),
-      "data/WholeTotalBM/downsampled/dge_50000_avg_reads_per_cell_onGenes.txt"]
+        rpc = [100, 500, 1000, 1500, 2000, 2500, 5000, 5500, 10000, 20000, 30000]),
+      "data/WholeTotalBM/downsampled/dge_50000_avg_reads_per_cell_onGenes.txt.gz"]
 
 # RULES TO RUN WORKFLOW PARTIALLY ------------------------------------------------------------------
 
@@ -98,11 +98,11 @@ rule Figure2:
     dge = expand("results/dge/{sample}_dge_report.html", sample = config["figure2"]),
     ds_dge = [expand("data/Sample10X/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
                 rpc = config["downsample"]["reads_per_cell"]["Sample10X"]),
-              expand("data/TAP1/downsampled/dge_{rpc}_avg_reads_per_cell_onGenes.txt",
+              expand("data/TAP1/downsampled/dge_{rpc}_avg_reads_per_cell_onGenes.txt.gz",
                 rpc = config["downsample"]["reads_per_cell"]["TAP1"]),
-              expand("data/TAP2/downsampled/dge_{rpc}_avg_reads_per_cell_onGenes.txt",
+              expand("data/TAP2/downsampled/dge_{rpc}_avg_reads_per_cell_onGenes.txt.gz",
                 rpc = config["downsample"]["reads_per_cell"]["TAP2"]),
-              expand("data/WholeTx/downsampled/dge_{rpc}_avg_reads_per_cell_onGenes.txt",
+              expand("data/WholeTx/downsampled/dge_{rpc}_avg_reads_per_cell_onGenes.txt.gz",
                 rpc = config["downsample"]["reads_per_cell"]["WholeTx"])]
                 
 # all enhancer analyses
@@ -122,15 +122,15 @@ rule bone_marrow_cell_types:
   input:
     align = expand("results/alignment/{sample}_align_report.html", sample = config["bone_marrow"]),
     dge = expand("results/dge/{sample}_dge_report.html", sample = config["bone_marrow"]),
-    ds_dge = [expand("data/{sample}/downsampled/dge_{reads}_avg_reads_per_cell_onGenes.txt",
+    ds_dge = [expand("data/{sample}/downsampled/dge_{rpc}_avg_reads_per_cell_onGenes.txt.gz",
         sample = ["TAPtotalBM", "TAPkitBM"],
-        reads = [100, 500, 1000, 1500, 2000, 2500, 5000, 5500]),
-      expand("data/{sample}/downsampled/dge_{reads}_avg_reads_per_cell_onGenes.txt",
+        rpc = [100, 500, 1000, 1500, 2000, 2500, 5000, 5500]),
+      expand("data/{sample}/downsampled/dge_{rpc}_avg_reads_per_cell_onGenes.txt.gz",
         sample = ["WholeTotalBM", "WholeKitBM"],
-        reads = [100, 500, 1000, 1500, 2000, 2500, 5000, 5500, 10000, 20000, 30000]),
-      "data/WholeTotalBM/downsampled/dge_50000_avg_reads_per_cell_onGenes.txt"]
+        rpc = [100, 500, 1000, 1500, 2000, 2500, 5000, 5500, 10000, 20000, 30000]),
+      "data/WholeTotalBM/downsampled/dge_50000_avg_reads_per_cell_onGenes.txt.gz"]
       
-# all validation data and input
+# additional validation data and input
 rule tapseq_validation:
   input:
     align = expand("results/alignment/{sample}_align_report.html",

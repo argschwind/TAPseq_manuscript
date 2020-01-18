@@ -29,9 +29,9 @@ chr8_genes <- target_genes %>%
   c(known_enh)
 
 # string patterns for all target genes (incl CROP-seq vectors)
-vector_prefix <- snakemake@params$vector_prefix
-targets_chr11 <- c(chr11_genes, vector_prefix)
-targets_chr8 <- c(chr8_genes, vector_prefix)
+vector_pattern <- snakemake@params$vector_pattern
+targets_chr11 <- c(chr11_genes, vector_pattern)
+targets_chr8 <- c(chr8_genes, vector_pattern)
 
 # total number of reads ----------------------------------------------------------------------------
 

@@ -7,8 +7,8 @@ sink(log)
 sink(log, type = "message")
 
 # required functions
-source("scripts/analyses/SingleCellExperiment_tapseq.R")
-source("scripts/analyses/differential_expression_fun.R")
+source(file.path(snakemake@scriptdir, "SingleCellExperiment_tapseq.R"))
+source(file.path(snakemake@scriptdir, "differential_expression_fun.R"))
 
 # register parallel backend if specified (if more than 1 thread provided)
 parallel <- FALSE

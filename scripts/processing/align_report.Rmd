@@ -17,7 +17,7 @@ knitr::opts_chunk$set(echo = FALSE)
 
 # load required functions and packages
 library(here)
-source(here("scripts/processing/align_report_fun.R"))
+source(file.path(snakemake@scriptdir, "align_report_fun.R"))
 ```
 
 This report shows summary statistics produced by the Drop-seq alignment pipeline for sample

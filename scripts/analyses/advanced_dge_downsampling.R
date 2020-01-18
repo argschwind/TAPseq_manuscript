@@ -92,6 +92,13 @@ cbc_whitelist <- readLines(here(snakemake@input$whitelist))
 # filter for cell barcodes on CBC whitelist
 umi_obs_filt <- filter(umi_obs, Cell.Barcode %in% cbc_whitelist)
 
+# remove any vector transcripts if vector_pattern is provided
+if (!is.null(snakemake@params$vector_pattern)) {
+  
+  umi_obs_filt <- filter(umi_obs_filt, !grepl(Gene, pattern = snakemake@params$vector_pattern))
+  
+}
+
 # only retain target genes if panel is set to onTarget
 if (panel == "onTarget") {
   
@@ -146,5 +153,12 @@ umi_obs_tpt <- filter_tpt(umi_obs_tpt, tpt_threshold = snakemake@params$tpt_thre
 dge <- extract_dge(umi_obs_tpt)
 dge_mat <- create_dge_matrix(dge)
 
-# save dge matrix to output file 
-write.table(dge_mat, file = here(snakemake@output), sep = "\t", row.names = FALSE, quote = FALSE)
+# output file
+if (tools::file_ext(snakemake@output[[1]]) == "gz") {
+  outfile <- gzfile(here(snakemake@output[[1]]))
+}else{
+  outfile <- here(snakemake@output[[1]])
+}
+
+# save dge matrix to output file
+write.table(dge_mat, file = outfile, sep = "\t", row.names = FALSE, quote = FALSE)

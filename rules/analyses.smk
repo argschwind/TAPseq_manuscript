@@ -65,8 +65,9 @@ rule advanced_downsample:
       config["advanced_dge_downsampling"]["target_genes"][wildcards.sample],
     whitelist = lambda wildcards: config["10x_cbc_whitelist"][wildcards.sample]
   output:
-    "data/{sample}/downsampled/dge_{reads}_{sampling}_reads_per_cell_{panel}.txt"
+    "data/{sample}/downsampled/dge_{reads}_{sampling}_reads_per_cell_{panel}.txt.gz"
   params:
+    vector_pattern = config["create_vector_ref"]["vector_prefix"],
     tpt_threshold = config["extract_dge"]["tpt_threshold"],
     seed = 20190513
   conda: "../envs/r_analyses.yml"
@@ -82,7 +83,7 @@ rule reads_on_target:
   output:
     "data/reads_on_target_validation_samples.csv"
   params:
-    vector_prefix = config["create_vector_ref"]["vector_prefix"]
+    vector_pattern = config["create_vector_ref"]["vector_prefix"]
   conda: "../envs/r_analyses.yml"
   script:
     "../scripts/analyses/reads_on_target.R"
