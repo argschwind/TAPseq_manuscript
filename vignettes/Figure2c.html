@@ -375,11 +375,11 @@ summary {
 require(ggplot2)
 require(reshape2)
 
-prturbations &lt;- readRDS(url(&quot;http://steinmetzlab.embl.de/TAPdata/TAP.per.RDS&quot;)) ##this corresponds to the combination of ../data/TAP_DIFFEX_sample1/perturb_status.txt and ../data/TAP_DIFFEX_sample2/perturb_status.txt if the snakemake pipeline was run.
+prturbations &lt;- readRDS(url(&quot;http://steinmetzlab.embl.de/TAPdata/TAP.per.RDS&quot;)) ##this corresponds to the combination of ../data/TAP1/perturb_status.txt and ../data/TAP2/perturb_status.txt if the snakemake pipeline was run.
 whole.per &lt;- read.table(url(&quot;http://steinmetzlab.embl.de/TAPdata/Sample10X.perturb_status.txt&quot;), header=T, row.names=1) #Classical Perturb-seq
-##this corresponds to ../data/WTX_REF/perturb_status.txt if the snakemake pipeline was run.
+##this corresponds to ../data/Sample10X/perturb_status.txt if the snakemake pipeline was run.
 
-whole.amp.per &lt;-  readRDS(url(&quot;http://steinmetzlab.embl.de/TAPdata/Whole.per.RDS&quot;)) #Perturb-seq with gRNA amplification,  ##this corresponds to ../data/WTX_DIFFEX/perturb_status.txt if the snakemake pipeline was run.</code></pre>
+whole.amp.per &lt;-  readRDS(url(&quot;http://steinmetzlab.embl.de/TAPdata/Whole.per.RDS&quot;)) #Perturb-seq with gRNA amplification,  ##this corresponds to ../data/WholeTx/perturb_status.txt if the snakemake pipeline was run.</code></pre>
 <p>Compute log-likelihoods of the generative model described by Dixit et al and used by Hill et al.</p>
 <p>###Targeted perturb-seq</p>
 <pre class="r"><code>per.per.cell &lt;- apply(prturbations,2,sum)

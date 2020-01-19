@@ -374,15 +374,15 @@ summary {
 <div id="data" class="section level2">
 <h2>Data</h2>
 <p>We need downsampled data for the deeply sequenced experiment of the chromosome 11 panel, and the deeply sequenced whole transcriptome experiment. Data were downsampeld at the level of raw reads to realistically simulate a lower sequencing depth. The downsampling can be reproduced from the files provided on GEO by running the rule Figure1 of <a href="https://github.com/argschwind/tapseq_manuscript" class="uri">https://github.com/argschwind/tapseq_manuscript</a> (documented there); alternatively we provide the results - please run the following code in the folder containing this vignette:</p>
-<pre class="sh"><code>mkdir -p ../data/TAP_DEEP_p1/downsampled
-wget http://steinmetzlab.embl.de/TAPdata/TAP_DEEP_p1.zip
-unzip -j -d ../data/TAP_DEEP_p1/downsampled TAP_DEEP_p1.zip
+<pre class="sh"><code>mkdir -p ../data/tapk562deep/downsampled
+wget http://steinmetzlab.embl.de/TAPdata/tapk562deep.zip
+unzip -j -d ../data/tapk562deep/downsampled tapk562deep.zip
 
-mkdir -p ../data/WTX_REF_Deep/downsampled
-wget http://steinmetzlab.embl.de/TAPdata/WTX_REF_DEEP.zip
-unzip -j -d ../data/WTX_REF_Deep/downsampled WTX_REF_DEEP.zip
+mkdir -p ../data/wtxk562deep/downsampled
+wget http://steinmetzlab.embl.de/TAPdata/wtxk562deep.zip
+unzip -j -d ../data/wtxk562deep/downsampled wtxk562deep.zip
 
-rm TAP_DEEP_p1.zip WTX_REF_DEEP.zip</code></pre>
+rm tapk562deep.zip wtxk562deep.zip</code></pre>
 <p>In R, we simply load info on the panel:</p>
 <pre class="r"><code>#expression levels of the various panels
 knowns &lt;- c(&quot;HBG1&quot;,&quot;HBG2&quot;,&quot;HBE1&quot;,&quot;HBD&quot;,&quot;HBB&quot;,&quot;GATA1&quot;,&quot;ZFPM2&quot;,&quot;MYC&quot;)
@@ -405,7 +405,7 @@ require(Matrix)</code></pre>
 <h2>Figure 1d</h2>
 <p>Simply count the UMIs observed at various read depths:</p>
 <pre class="r"><code>folders &lt;- c(
-    &quot;k562.82.10x.low&quot; = &quot;../data/TAP_DEEP_p1/downsampled/&quot;
+    &quot;k562.82.10x.low&quot; = &quot;../data/tapk562deep/downsampled/&quot;
 )
 
 
@@ -437,7 +437,7 @@ getUMI &lt;- function(n, frPositive = T){
 
 #for whole Tx data, given a reference panel
 getUMI2 &lt;- function(ps, frPositive=T, onPanel=T) {
-  folder &lt;- &quot;../data/WTX_REF_Deep/downsampled/&quot;
+  folder &lt;- &quot;../data/wtxk562deep/downsampled/&quot;
   reads &lt;- as.integer(unique(gsub(&quot;dge_(.+)_avg_reads_per_cell.txt&quot;,&quot;\\1&quot;,list.files(folder,&quot;dge_.+_avg_reads_per_cell.txt&quot;))))
 
   out &lt;- lapply(reads, function(nreads ){
@@ -490,8 +490,8 @@ UMIstat2$onPanel &lt;- T
 
 UMIstat &lt;- rbind(UMIstat1, UMIstat2)</code></pre>
 <p>For panel e, we additionally need to know the expression level of the various genes, which we take from non-downsampled data</p>
-<pre class="r"><code>total.nods &lt;- read.csv(url(&quot;http://steinmetzlab.embl.de/TAPdata/WTX_REF_Deep.counts.csv&quot;), row.names=1)
-#this corresponds to ../data/WTX_REF_Deep/dge.txt if the snakemake pipeline was run.
+<pre class="r"><code>total.nods &lt;- read.csv(url(&quot;http://steinmetzlab.embl.de/TAPdata/wtxk562deep.counts.csv&quot;), row.names=1)
+#this corresponds to ../data/wtxk562deep/dge.txt if the snakemake pipeline was run.
 
 base_expression &lt;- apply(total.nods[panels[[1]],], 1, mean)
 bin_expression &lt;- infotheo::discretize(base_expression, nbins = 4)$X

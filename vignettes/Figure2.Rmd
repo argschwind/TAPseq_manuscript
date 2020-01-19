@@ -27,11 +27,11 @@ require(Matrix)
 
 #Non-downsampled targeted seq data, 1.7Mb
 TAP.nods <- readRDS(url("http://steinmetzlab.embl.de/TAPdata//TAP.nods.RDS"))
-##this corresponds to the combination of ../data/TAP_DIFFEX_sample1/dge.txt and ../data/TAP_DIFFEX_sample2/dge.txt if the snakemake pipeline was run.
+##this corresponds to the combination of ../data/TAP1/dge.txt and ../data/TAP2/dge.txt if the snakemake pipeline was run.
 
 #Matrix encoding perturbation identity for targeted seq experiment, 173kb
 TAP.per <-  t(readRDS(url("http://steinmetzlab.embl.de/TAPdata//TAP.per.RDS")))
-##this corresponds to the combination of ../data/TAP_DIFFEX_sample1/dge.txt and ../data/TAP_DIFFEX_sample2/dge.txt if the snakemake pipeline was run.
+##this corresponds to the combination of ../data/TAP1/dge.txt and ../data/TAP2/dge.txt if the snakemake pipeline was run.
 
 #Non-downsampled whole transcriptome data, 272Mb
 Whole.nods <-  readRDS(url("http://steinmetzlab.embl.de/TAPdata//Whole.nods.RDS"))
@@ -45,20 +45,20 @@ Data were downsampeld at the level of raw reads to realistically simulate a lowe
 
 ```{sh downsampled, eval = F}
 
-mkdir -p ../data/TAP_DIFFEX_sample1/downsampled
-mkdir -p ../data/TAP_DIFFEX_sample2/downsampled
-mkdir -p ../data/WTX_DIFFEX/downsampled
+mkdir -p ../data/TAP1/downsampled
+mkdir -p ../data/TAP2/downsampled
+mkdir -p ../data/WholeTx/downsampled
 
 #Downsampled targeted seq. data, 3.3 Mb
 wget http://steinmetzlab.embl.de/TAPdata/TAP1.downsampled.zip
-unzip -j -d ../data/TAP_DIFFEX_sample1/downsampled TAP1.downsampled.zip
+unzip -j -d ../data/TAP1/downsampled TAP1.downsampled.zip
 
 wget http://steinmetzlab.embl.de/TAPdata/TAP2.downsampled.zip
-unzip -j -d ../data/TAP_DIFFEX_sample2/downsampled TAP2.downsampled.zip
+unzip -j -d ../data/TAP2/downsampled TAP2.downsampled.zip
 
 #Downsampled whole transcriptome seq. data, 750 Mb
 wget http://steinmetzlab.embl.de/TAPdata/WholeTx.downsampled.zip
-unzip -j -d ../data/WTX_DIFFEX/downsampled WholeTx.downsampled.zip
+unzip -j -d ../data/WholeTx/downsampled WholeTx.downsampled.zip
 
 rm TAP1.downsampled.zip TAP2.downsampled.zip WholeTx.downsampled.zip
 ```

@@ -387,7 +387,7 @@ require(Matrix)</code></pre>
 <pre class="r"><code>pairs &lt;- read.csv(url(&quot;http://steinmetzlab.embl.de/TAPdata/chromatin_annotated_pairs.csv&quot;), stringsAsFactors = F)
 #this corresponds to the ../data/chromatin_annotated_pairs.csv if the snakemake pipeline was run
 expression &lt;- readRDS(url(&quot;http://steinmetzlab.embl.de/TAPdata/screen_mean_expression.RDS&quot;))
-#this corresponds to the row means of ../data/TAP_SCREEN_chr11 if the snakemake pipeline was run</code></pre>
+#this corresponds to the row means of ../data/11iScreen1 if the snakemake pipeline was run</code></pre>
 <p>For comparing classifier performance between datasets, we annotate the enhancers used by <a href="https://www.ncbi.nlm.nih.gov/pubmed/30612741">Gasperini et al.</a> in the same way and load it into R. Also, we load their differential expression testing results (Table S2b of Gasperini et al.)</p>
 <pre class="r"><code>gasperini.predictors &lt;- read.csv(url(&quot;http://steinmetzlab.embl.de/TAPdata/chromatin_annotated_pairs_gasperini_screen.csv&quot;), stringsAsFactors = F)
 gasperini.hits &lt;- read.csv(url(&quot;http://steinmetzlab.embl.de/TAPdata/gasperini_hits_screen.csv&quot;),sep=&quot;;&quot;)</code></pre>

@@ -34,7 +34,7 @@ Differential expression testing was performed for the data from the screen and r
 pairs <- read.csv(url("http://steinmetzlab.embl.de/TAPdata/chromatin_annotated_pairs.csv"), stringsAsFactors = F)
 #this corresponds to the ../data/chromatin_annotated_pairs.csv if the snakemake pipeline was run
 expression <- readRDS(url("http://steinmetzlab.embl.de/TAPdata/screen_mean_expression.RDS"))
-#this corresponds to the row means of ../data/TAP_SCREEN_chr11 if the snakemake pipeline was run
+#this corresponds to the row means of ../data/11iScreen1 if the snakemake pipeline was run
 ```
 
 For comparing classifier performance between datasets, we annotate the enhancers used by [Gasperini et al.](https://www.ncbi.nlm.nih.gov/pubmed/30612741) in the same way and load it into R. Also, we load their differential expression testing results (Table S2b of Gasperini et al.)

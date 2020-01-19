@@ -40,8 +40,8 @@ rules.
 Key plots of figure 1 can be reproduced by running the Vignette for Figure1e,f. This requires the
 following data processing step:
 ```
-# align all TAP-seq data for figure 1 and create dge downsamplings (jobs = number of threads to use
-# in parallel, please adjust; n = dryrun, remove it to execute)
+# align all TAP-seq data for figure 1 and create dge downsamplings (--jobs = number of threads to
+# use in parallel, please adjust; -n = dryrun, remove it to execute)
 snakemake --use-conda Figure1 --jobs 4 -n
 ```
 
@@ -101,6 +101,6 @@ snakemake --use-conda dge -n
 If you feel brave you can also execute the entire workflow at once. Godspeed, this will take a long
 time!
 ```
-# execute entire project
-snakemake --use-conda --jobs 4 -n
+# execute entire project (-k: don't abort independent jobs if a job fails)
+snakemake --use-conda --jobs 4 -k -n
 ```

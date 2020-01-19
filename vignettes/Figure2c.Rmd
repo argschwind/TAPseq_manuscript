@@ -16,11 +16,11 @@ require(Matrix)
 require(ggplot2)
 require(reshape2)
 
-prturbations <- readRDS(url("http://steinmetzlab.embl.de/TAPdata/TAP.per.RDS")) ##this corresponds to the combination of ../data/TAP_DIFFEX_sample1/perturb_status.txt and ../data/TAP_DIFFEX_sample2/perturb_status.txt if the snakemake pipeline was run.
+prturbations <- readRDS(url("http://steinmetzlab.embl.de/TAPdata/TAP.per.RDS")) ##this corresponds to the combination of ../data/TAP1/perturb_status.txt and ../data/TAP2/perturb_status.txt if the snakemake pipeline was run.
 whole.per <- read.table(url("http://steinmetzlab.embl.de/TAPdata/Sample10X.perturb_status.txt"), header=T, row.names=1) #Classical Perturb-seq
-##this corresponds to ../data/WTX_REF/perturb_status.txt if the snakemake pipeline was run.
+##this corresponds to ../data/Sample10X/perturb_status.txt if the snakemake pipeline was run.
 
-whole.amp.per <-  readRDS(url("http://steinmetzlab.embl.de/TAPdata/Whole.per.RDS")) #Perturb-seq with gRNA amplification,  ##this corresponds to ../data/WTX_DIFFEX/perturb_status.txt if the snakemake pipeline was run.
+whole.amp.per <-  readRDS(url("http://steinmetzlab.embl.de/TAPdata/Whole.per.RDS")) #Perturb-seq with gRNA amplification,  ##this corresponds to ../data/WholeTx/perturb_status.txt if the snakemake pipeline was run.
 
 ```
 

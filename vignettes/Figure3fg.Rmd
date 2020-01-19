@@ -497,7 +497,7 @@ expect_int <- bind_rows(chr8 = chr8_int_over_dist, chr11 = chr11_int_over_dist, 
   filter(!is.nan(int_freq))
 ```
 
-The interaction frequency of all tested enhancer - gene pair computed, defined as the interaction
+The interaction frequency of all tested enhancer - gene pair is computed, defined as the interaction
 frequency of the genomic bins overlapping the enhancer and the target genes TSS.
 ```{r intFreqFun}
 # function to compute the interaction frequency for enhancer - gene pairs, by finding the hi-c 

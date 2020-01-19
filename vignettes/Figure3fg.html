@@ -11,7 +11,7 @@
 
 <meta name="author" content="Schraivogel, Gschwind et al." />
 
-<meta name="date" content="2020-01-18" />
+<meta name="date" content="2020-01-19" />
 
 <title>Chromatin and Hi-C signatures of enhancer - target pairs (Figure 3f,g)</title>
 
@@ -309,7 +309,7 @@ $(document).ready(function () {
 
 <h1 class="title toc-ignore">Chromatin and Hi-C signatures of enhancer - target pairs (Figure 3f,g)</h1>
 <h4 class="author"><em>Schraivogel, Gschwind et al.</em></h4>
-<h4 class="date"><em>January 18, 2020</em></h4>
+<h4 class="date"><em>January 19, 2020</em></h4>
 
 </div>
 
@@ -741,7 +741,7 @@ chr11_int_over_dist &lt;- intFreq_over_distance(chr11_region_hic)
 # normalization failed for certain bins
 expect_int &lt;- bind_rows(chr8 = chr8_int_over_dist, chr11 = chr11_int_over_dist, .id = &quot;sample&quot;) %&gt;%
   filter(!is.nan(int_freq))</code></pre>
-<p>The interaction frequency of all tested enhancer - gene pair computed, defined as the interaction frequency of the genomic bins overlapping the enhancer and the target genes TSS.</p>
+<p>The interaction frequency of all tested enhancer - gene pair is computed, defined as the interaction frequency of the genomic bins overlapping the enhancer and the target genes TSS.</p>
 <pre class="r"><code># function to compute the interaction frequency for enhancer - gene pairs, by finding the hi-c 
 # genomic bins with overlap with the enhancer and the target gene tss. the interaction frequency of
 # the pair is then defined as the interaction frequency of these bins
