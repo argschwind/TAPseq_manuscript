@@ -43,7 +43,7 @@ sce <- create_tapseq_sce(dge = dge, perturb_status = perturb_status,
                          vector_pattern = snakemake@params$vector_pattern)
 
 # remove cells from specified 10x lanes
-if (all(snakemake@params$exclude_lanes != "none")) {
+if (!is.null(snakemake@params$exclude_lanes)) {
   
   # get cells that do not belong to filtered out lanes
   cells <- colnames(sce)

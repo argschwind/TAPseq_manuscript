@@ -190,7 +190,6 @@ ggplot(all_pairs, aes(x = dist_to_tss, fill = significant)) +
 cap <- "Distance to TSS distribution of significant enhancers and sampled non-significant controls"
 ```
 
-
 ## Enrichment of chromatin marks at enhancers
 The fold change over control signal is compared between enhancers significantly associated with a
 target gene and sampled non-significant control enhancers.
@@ -329,3 +328,9 @@ pw_tests %>%
 # save pairwise tests as .csv file
 write.csv(pw_tests, file = here("results/chromatin_pairwise_tests.csv"), row.names = FALSE)
 ```
+
+***
+
+# Source
+* <a download="chromatin_analyses_screen.Rmd" href="`r base64enc::dataURI(file = params$rmd,
+    mime = 'text/rmd', encoding = 'base64')`">R Markdown source file (to produce this document)</a>

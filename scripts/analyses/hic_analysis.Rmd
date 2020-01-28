@@ -3,7 +3,7 @@ title: "Hi-C analysis"
 author: "Andreas Gschwind"
 date: "`r format(Sys.time(), '%B %d, %Y')`"
 params:
-  rmd: "chromatin_analyses_screen.Rmd"
+  rmd: "hic_analysis.Rmd"
 output:
   bookdown::html_document2:
     toc: yes
@@ -510,3 +510,9 @@ ggplot(all_int_pairs, aes(x = fct_relevel(type, "sig", "non_sig"), y = int_freq 
 # save plot for manuscript
 ggsave(here("results/plots", "hic_sig_vs_nonsig.pdf"), device = "pdf", width = 4, height = 7)
 ```
+
+***
+
+# Source
+* <a download="hic_analysis.Rmd" href="`r base64enc::dataURI(file = params$rmd,
+    mime = 'text/rmd', encoding = 'base64')`">R Markdown source file (to produce this document)</a>

@@ -5,7 +5,8 @@ This repository contains code to reproduce the results presented in the article.
 processing from fastq files to transcript counts etc. It also performs some high-level analyses, in 
 particular analyses underlying figure 3 of the manuscript and quality control steps. 
 
-High level analyses underlying figures 1, 2, 3b,h,i and 4 are described in detail in the *vignettes* subfolder. Input data required for running these vignettes can either be produced by running the
+High level analyses underlying figures 1, 2, 3b,h,i and 4 are described in detail in the *vignettes*
+subfolder. Input data required for running these vignettes can either be produced by running the
 relevant parts of the snakemake pipeline, or they can be downloaded as described in the vignettes.  
 
 The workflow can be downloaded by simply cloning the repository into a location of choice:
