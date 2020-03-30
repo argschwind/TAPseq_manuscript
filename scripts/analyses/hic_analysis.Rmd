@@ -385,8 +385,7 @@ p2 <- ggplot(int_freqs_plot, aes(x = dist, y = int_freq + 1)) +
               color = "indianred3", se = FALSE, lwd = 2) +
   labs(x = "Distance (kb)", y = "Hi-C Interaction frequency", color = "Confidence",
        linetype = "Type") +
-  scale_color_manual(values = c("High" = "goldenrod2",
-                                "Low" = "darkslategray3", "NS" = "gray")) +
+  scale_color_manual(values = c("High" = "goldenrod2", "Low" = "darkslategray3", "NS" = "gray")) +
   scale_x_log10(breaks = x_breaks + 5000, labels = scales::comma(x_breaks / 1000)) +
   scale_y_log10(limits = c(NA, 1200), breaks = c(1, 10, 100, 1000)) +
   theme_bw() +
@@ -425,8 +424,7 @@ p2 <- ggplot(int_freqs_plot, aes(x = dist, y = int_freq + 1)) +
               color = "indianred3", se = FALSE, lwd = 2) +
   labs(x = "Distance (kb)", y = "Hi-C Interaction frequency", color = "Confidence",
        linetype = "Type") +
-  scale_color_manual(values = c("High" = "goldenrod2",
-                                "Low" = "darkslategray3", "NS" = "gray")) +
+  scale_color_manual(values = c("High" = "goldenrod2", "Low" = "darkslategray3", "NS" = "gray")) +
   scale_x_log10(breaks = x_breaks + 5000, labels = scales::comma(x_breaks / 1000)) +
   scale_y_log10(limits = c(NA, 1200), breaks = c(1, 10, 100, 1000)) +
   theme_bw() +

@@ -296,10 +296,6 @@ all_pairs_conf %>%
 
 # figure caption
 cap <- "H3k27me3 signal versus enhancer confidence level"
-
-# save plot for manuscript
-ggsave(here("results/plots", "h3k27me3_vs_conf.pdf"), device = "pdf", width = 2.8,
-       height = 3.5)
 ```
 
 <br>
@@ -312,9 +308,14 @@ Pairwise tests are performed for all comparison using the non-parametric Wilcoxo
 pw_tests <- compare_means(fc_over_ctrl ~ conf, group.by = "assay", data = all_pairs_conf,
                           method = "wilcox.test", p.adjust.method = "holm")
 
-# reformat for printing
+# number of etps per group
+etps_per_group <- count(all_pairs_conf, assay, conf)
+
+# add number of etps per group and reformat for printing
 pw_tests <- pw_tests %>%
-  select(assay, group1, group2, p.format, p.signif, p.adj) %>%
+  left_join(etps_per_group, by = c("assay" = "assay", "group1" = "conf")) %>% 
+  left_join(etps_per_group, by = c("assay" = "assay", "group2" = "conf")) %>% 
+  select(assay, group1, group2, n.group1 = n.x, n.group2 = n.y, p.format, p.signif, p.adj) %>%
   rename(p.value = p.format)
 
 # create pretty html table

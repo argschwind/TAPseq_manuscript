@@ -212,7 +212,7 @@ enh_pert_targets <- vector_targets %>%
   filter(grepl(TARGET, pattern = "chr\\d+:.*") | TARGET %in% known_enh) %>%
   mutate(sample = paste0(sub("chr", "", sample), "iScreen1"))
 
-# only retain perturbation status on enhancer perturabtions
+# only retain perturbation status on enhancer perturbations
 enh_perts <- perturb_status %>%
   lapply(FUN = function(x) {
     enh_rows <- rownames(x) %in% enh_pert_targets$TARGET
@@ -472,9 +472,6 @@ ggplot(cis_enh_perts_plot,
   theme_bw() +
   theme(legend.position = "none", axis.title.x = element_blank(), text = element_text(size = 20),
         panel.grid = element_blank())
-
-# save plot for manuscript
-ggsave(here("results/plots", "dist_sig_vs_nonsig.pdf"), device = "pdf", width = 7, height = 5)
 ```
 
 ## Enhancers and gene landscape
@@ -627,9 +624,6 @@ ggplot(nearest_per_hit, aes(x = fct_relevel(factor(is_nearest), "1"), fill = sam
   theme_bw() +
   theme(axis.title.x = element_blank(), text = element_text(size = 13),
         panel.grid = element_blank())
-
-# save plot for manuscript
-ggsave(here("results/plots", "nearest_tss.pdf"), device = "pdf", width = 5, height = 3)
 ```
 
 **Nearest TSS vs. p-value and confidence level**
