@@ -341,4 +341,5 @@ pairs <- pairs %>%
          significant = if_else(significant == "sig", true = 1, false = 0))
 
 # write to output file
+pairs <- select(pairs, -enh_in_intron)  # remove column not used in enhancer prediction analysis
 write.csv(pairs, file = here(snakemake@output[[1]]), quote = FALSE, row.names = FALSE)

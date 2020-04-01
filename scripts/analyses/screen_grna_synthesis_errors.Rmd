@@ -1,0 +1,194 @@
+---
+title: "Screen gRNA synthesis errors"
+author: "Andreas Gschwind"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+params:
+  rmd: "screen_grna_synthesis_errors.Rmd"
+output:
+  bookdown::html_document2:
+    toc: yes
+---
+
+# Goal
+Synthesis errors in gRNA sequences are extracted from CROP-seq vector reads for the enhancer screen
+experiments.
+
+```{css echo=FALSE}
+/* Define a margin before every image element */
+img {
+  margin-top: 3em;
+}
+```
+
+```{r setup, message=FALSE}
+# attach required packages
+library(here)
+library(Biostrings)
+library(tidyverse)
+```
+
+# Load data
+Perturbation status files and CROP-seq vector read sequences are loaded for both enhancer screen
+experiments.
+```{r loadData}
+# perturbation status
+pert_8iScreen1 <- read.table(here("data/8iScreen1/perturb_status.txt"), header = TRUE,
+                             stringsAsFactors = FALSE)
+pert_11iScreen1 <- read.table(here("data/11iScreen1/perturb_status.txt"), header = TRUE,
+                             stringsAsFactors = FALSE)
+
+# convert perturbation status to long format and only keep detected perturbations
+pert_8iScreen1 <- pert_8iScreen1 %>% 
+  pivot_longer(-VECTOR, names_to = "cell_barcode", values_to = "pert") %>% 
+  filter(pert > 0) %>% 
+  select(-pert) %>% 
+  dplyr::rename(vector_id = VECTOR)
+
+pert_11iScreen1 <- pert_11iScreen1 %>% 
+  pivot_longer(-VECTOR, names_to = "cell_barcode", values_to = "pert") %>% 
+  filter(pert > 0) %>% 
+  select(-pert) %>% 
+  dplyr::rename(vector_id = VECTOR)
+
+# files containing parsed misatch data
+outfile_8iScreen1 <- here("data/8iScreen1/cropseq_vector_seqs.txt.gz")
+outfile_11iScreen1 <- here("data/11iScreen1/cropseq_vector_seqs.txt.gz")
+
+col_types <- cols(
+  "cell_barcode" = col_character(),
+  "umi_barcode" = col_character(),
+  "aligned_vector_id" = col_character(),
+  "mapping_quality" = col_integer(),
+  "mismatches" = col_character(),
+  "mismatch_positions" = col_character(),
+  "sequence" = col_character()
+)
+
+# read mismatch data
+mm_8iScreen1 <- read_tsv(outfile_8iScreen1, col_types = col_types)
+mm_11iScreen1 <- read_tsv(outfile_11iScreen1, col_types = col_types)
+```
+
+***
+
+# gRNA synthesis errors
+
+## Extract gRNA sequence
+CROP-seq vector reads are filtered for a mapping quality of at least 10, which is used when
+extracting DGE data from aligned reads.
+```{r filterVectorReads}
+# only retain reads with a mapping quality >= 10
+mm_8iScreen1  <- dplyr::filter(mm_8iScreen1, mapping_quality >= 10)
+mm_11iScreen1 <- dplyr::filter(mm_11iScreen1, mapping_quality >= 10)
+
+# filter for reads aligning to inferred perturbations for each cell
+mm_perts8 <- mm_8iScreen1 %>% 
+  rename(vector_id = aligned_vector_id) %>% 
+  mutate(cell_barcode = sub("XC:Z:", "", cell_barcode),
+         vector_id = sub("GE:Z:CROPseq_dCas9_DS_", "", vector_id),
+         mismatches = as.integer(sub("NM:i:", "", mismatches))) %>% 
+  inner_join(pert_8iScreen1, by = c("cell_barcode", "vector_id"))
+
+mm_perts11 <- mm_11iScreen1 %>% 
+  rename(vector_id = aligned_vector_id) %>% 
+  mutate(cell_barcode = sub("XC:Z:", "", cell_barcode),
+         vector_id = sub("GE:Z:CROPseq_dCas9_DS_", "", vector_id),
+         mismatches = as.integer(sub("NM:i:", "", mismatches))) %>% 
+  inner_join(pert_11iScreen1, by = c("cell_barcode", "vector_id"))
+```
+
+gRNA sequences are extracted from vector reads based on the expected gRNA length (19bp) and the
+position of the TAP-seq primer binding site within the CROP-seq vector transcript.
+```{r gRNASeqs}
+# load vector sequences for chr8 and chr11 screen datasets
+vectors8 <- readDNAStringSet(here("meta_data/cropseq_vectors/cropseq_vectors_chr8_screen.fasta"))
+vectors11 <- readDNAStringSet(here("meta_data/cropseq_vectors/cropseq_vectors_chr11_screen.fasta"))
+
+# convert to data.frame 
+gRNAs8 <- data.frame(vector_id = names(vectors8), vector_seq = as.character(vectors8),
+                     row.names = NULL, stringsAsFactors = FALSE)
+
+gRNAs11 <- data.frame(vector_id = names(vectors11), vector_seq = as.character(vectors11),
+                     row.names = NULL, stringsAsFactors = FALSE)
+
+# extract gRNA sequences (19bp) from vector sequences
+gRNAs8 <- gRNAs8 %>% 
+  mutate(grna_seq = sub(".*TGTGGAAAGGACGAAACACCG", "", vector_seq),
+         grna_seq = substr(grna_seq, start = 1, stop = 19))
+
+gRNAs11 <- gRNAs11 %>% 
+  mutate(grna_seq = sub(".*TGTGGAAAGGACGAAACACCG", "", vector_seq),
+         grna_seq = substr(grna_seq, start = 1, stop = 19))
+
+# extract gRNA sequences from vector reads, assuming gRNAs are 19bp long
+mm_perts8  <- mutate(mm_perts8, grna_seq = substr(sequence, start = 22, stop = 40))
+mm_perts11 <- mutate(mm_perts11, grna_seq = substr(sequence, start = 22, stop = 40))
+```
+
+## Create gRNA consensus sequence
+The gRNA consensus sequence is created for every gRNA in every cell to account for sequencing
+errors. Synthesis errors should be detected in the majority of reads, while sequencing errors each
+occur only in a small fraction of reads for a given gRNA.
+```{r gRNAConsensusSeqs}
+# create consensus gRNA sequence for every detected (perturbations) gRNA for each cell
+gRNA_consensus_chr8 <- mm_perts8 %>% 
+  group_by(cell_barcode, vector_id) %>% 
+  summarize(grna_consensus_seq = consensusString(DNAStringSet(grna_seq)))
+
+gRNA_consensus_chr11 <- mm_perts11 %>% 
+  group_by(cell_barcode, vector_id) %>% 
+  summarize(grna_consensus_seq = consensusString(DNAStringSet(grna_seq)))
+
+# add expected gRNA sequence
+gRNA_consensus_chr8 <- gRNA_consensus_chr8 %>% 
+  left_join(select(gRNAs8, -vector_seq), by = "vector_id")
+
+gRNA_consensus_chr11 <- gRNA_consensus_chr11 %>% 
+  left_join(select(gRNAs11, -vector_seq), by = "vector_id")
+```
+
+## Compute number of gRNA synthesis
+The number of synthesis errors is computed by calculating the edit distance of every gRNA consensus
+sequence to its expected sequence.
+```{r editDistance}
+# function to compute edit distance between consensus and expected gRNA sequences
+calc_edit_dist <- function(x, y, method = "levenshtein") {
+  as.integer(stringDist(c(x, y), method = method))
+}
+
+# calculate edit distance between sequenced consensus gRNA and expected gRNA sequence
+gRNA_consensus_chr8 <- gRNA_consensus_chr8 %>% 
+  rowwise() %>% 
+  mutate(edit_dist = calc_edit_dist(grna_consensus_seq, grna_seq, method = "levenshtein"))
+
+gRNA_consensus_chr11 <- gRNA_consensus_chr11 %>% 
+  rowwise() %>% 
+  mutate(edit_dist = calc_edit_dist(grna_consensus_seq, grna_seq, method = "levenshtein"))
+
+noerr_chr8 <- mean(gRNA_consensus_chr8$edit_dist == 0)
+noerr_chr11 <- mean(gRNA_consensus_chr11$edit_dist == 0)
+```
+
+```{r plot, fig.height=4, fig.width=5}
+# create one table
+gRNA_cons <- bind_rows(Chr8 = gRNA_consensus_chr8, Chr11 = gRNA_consensus_chr11, .id = "Sample")
+
+# create histogram of edit distance distribution
+ggplot(gRNA_cons, aes(edit_dist, fill = Sample)) +
+  geom_histogram(position = "dodge", bins = 20) +
+  labs(x = "Edit distance\n(gRNA consensus sequence - template)",
+       y = "gRNA - cell combinations") +
+  scale_fill_manual(values = c(Chr11 = "indianred3", Chr8 = "steelblue")) +
+  theme_bw() +
+  theme(panel.grid = element_blank(), aspect.ratio = 1,
+        text = element_text(size = 15))
+  
+# save plot to .pdf file
+ggsave(filename = here("results/plots", "screen_gRNA_errors.pdf"), height = 4, width = 5)
+```
+
+***
+
+# Source
+* <a download="screen_grna_synthesis_errors.Rmd" href="`r base64enc::dataURI(file = params$rmd,
+    mime = 'text/rmd', encoding = 'base64')`">R Markdown source file (to produce this document)</a>

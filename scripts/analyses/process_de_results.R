@@ -50,6 +50,9 @@ annot <- annot[annot$type == "exon" &
                  annot$transcript_biotype == "protein_coding"
                ]
 
+# remove unlikely exons for HBE1 (extremely long introns, do not agree with RefSeq nor other HB*)
+annot <- annot[!annot$exon_id %in% c("ENSE00001484269", "ENSE00001484268", "ENSE00001526635")]
+
 # split by gene name into a GRangesList
 genes <- split(annot, f = annot$gene_name)
 
@@ -152,8 +155,44 @@ enh_perts <- enh_perts %>%
                                               false = gene_tss - enh_center),
                                false = as.numeric(NA)))
 
+
+# label intronic ETPs ------------------------------------------------------------------------------
+
+# create GRangesList object with gene locus coordinates (overlapping enhancers should be intronic)
+gene_loci <- range(genes)
+
+# create GRanges object with coordinates of all cis-enhancers (no promoter controls)
+cis_enh_coords <- enh_perts %>% 
+  ungroup() %>% 
+  filter(enh_type == "cis") %>% 
+  select(chr = enh_chr, start = enh_start, end = enh_end, perturbation) %>%
+  distinct() %>% 
+  makeGRangesFromDataFrame(keep.extra.columns = TRUE)
+
+# overlap enhancers with gene loci
+overlaps <- findOverlaps(cis_enh_coords, gene_loci, ignore.strand = TRUE)
+
+# covert to data.frame with overlapping gene names for every enhancers
+enh_gene_overlaps <- data.frame(perturbation = cis_enh_coords[queryHits(overlaps)]$perturbation,
+                                gene = names(gene_loci[subjectHits(overlaps)]),
+                                stringsAsFactors = FALSE)
+
+# create nested data.frame with all overlapping genes per perturbation
+enh_gene_overlaps <- enh_gene_overlaps %>% 
+  group_by(perturbation) %>% 
+  nest(enh_overlapping_genes = gene)
+
+# add to results and add column indicating intronic ETPs
+enh_perts <- enh_perts %>% 
+  left_join(enh_gene_overlaps, by = "perturbation") %>% 
+  rowwise() %>% 
+  mutate(enh_in_intron = if_else(gene %in% enh_overlapping_genes$gene, true = 1, false = 0))
+
+
+# export processed DE results ----------------------------------------------------------------------
+
 # reformat for output
-enh_perts <- select(enh_perts, -enh_center)
+enh_perts <- select(enh_perts, -c(enh_center, enh_overlapping_genes))
 
 # save processed output to file
 write.csv(enh_perts, file = here(snakemake@output), row.names = FALSE)

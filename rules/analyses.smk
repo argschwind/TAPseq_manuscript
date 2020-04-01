@@ -94,15 +94,15 @@ rule tapseq_vs_cropseq:
     reads_on_target = "data/reads_on_target_validation_samples.csv",
     target_genes = "meta_data/target_gene_panels/target_genes_validation.csv",
     dge = [expand("data/Sample10X/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
-             rpc = config["downsample"]["reads_per_cell"]["Sample10X"]),
-           expand("data/11iv210ng/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
-             rpc = config["downsample"]["reads_per_cell"]["11iv210ng"]),
-           expand("data/11iv22ng/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
-             rpc = config["downsample"]["reads_per_cell"]["11iv22ng"]),
-           expand("data/8iv210ng/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
-             rpc = config["downsample"]["reads_per_cell"]["8iv210ng"]),
-           expand("data/8iv22ng/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
-             rpc = config["downsample"]["reads_per_cell"]["8iv22ng"])]
+        rpc = config["downsample"]["reads_per_cell"]["Sample10X"]),
+      expand("data/11iv210ng/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+        rpc = config["downsample"]["reads_per_cell"]["11iv210ng"]),
+      expand("data/11iv22ng/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+        rpc = config["downsample"]["reads_per_cell"]["11iv22ng"]),
+      expand("data/8iv210ng/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+        rpc = config["downsample"]["reads_per_cell"]["8iv210ng"]),
+      expand("data/8iv22ng/downsampled/dge_{rpc}_avg_reads_per_cell.txt",
+        rpc = config["downsample"]["reads_per_cell"]["8iv22ng"])]
   output:
     "results/analyses/tapseq_vs_cropseq.html"
   conda: "../envs/r_analyses.yml"
@@ -327,3 +327,28 @@ rule abc_analysis:
   conda: "../envs/r_map_enhancers.yml"
   script:
     "../scripts/analyses/abc_analysis_screen.Rmd"
+    
+# extract CROP-seq vector sequences from aligned bam files and save to compressed tab-delimited file
+rule extract_cropseq_vectors:
+  input:
+    bam = "data/{sample}/gene_tagged_aligned.bam",
+    dge_summary = "data/{sample}/dge_summary.txt"
+  output:
+    "data/{sample}/cropseq_vector_seqs.txt.gz"
+  params:
+    vector_pattern = config["create_vector_ref"]["vector_prefix"]
+  conda:  "../envs/r_dropseq_tools.yml"
+  shell:
+    "Rscript scripts/analyses/extract_cropseq_vectors.R -b {input.bam} -d {input.dge_summary} "
+    "-p {params.vector_pattern} -o {output}"
+    
+# analyse gRNA synthesis errors in enhancer screen experiments
+rule screen_grna_errors:
+  input:
+    vector_reads = expand("data/{sample}/cropseq_vector_seqs.txt.gz", sample = config["screen"]),
+    perturb_status = expand("data/{sample}/perturb_status.txt", sample = config["screen"])
+  output:
+    "results/analyses/screen_grna_synthesis_errors.html"
+  conda: "../envs/r_map_enhancers.yml"
+  script:
+    "../scripts/analyses/screen_grna_synthesis_errors.Rmd"

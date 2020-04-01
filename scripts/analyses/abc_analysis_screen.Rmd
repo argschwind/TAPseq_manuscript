@@ -247,7 +247,7 @@ considering enhancers proximal to gene TSSs (1Mb).
 The receiver operator curves for the different assays and ABC score are plotted for all ETPs within
 1Mb.
 ```{r, roc, message=FALSE, fig.height=9, fig.width=5}
-# function to calculate area under roc curve
+# function to calculate roc curve
 calc_roc <- function(category, prediction) {
   
   # order by prediction
