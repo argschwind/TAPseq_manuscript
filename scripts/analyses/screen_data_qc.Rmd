@@ -54,10 +54,10 @@ names(perturb_status_files) <- basename(dirname(perturb_status_files))
 perturb_status <- lapply(perturb_status_files, FUN = read.table, header = TRUE,
                          row.names = "VECTOR", stringsAsFactors = FALSE)
 
-# dge input files from validation TASC-seq experiments
+# dge input files from validation TAP-seq experiments
 valid_dge_files <- grep(snakemake@input$valid_dge, pattern = "iv2", value = TRUE)
 valid_dge_files <- here(valid_dge_files)
-names(valid_dge_files) <- basename(dirname(valid_dge_files))
+names(valid_dge_files) <- basename(dirname(dirname(valid_dge_files)))
 
 # load validation dge data
 valid_dge <- lapply(valid_dge_files, FUN = read.table, header = TRUE, stringsAsFactors = FALSE)

@@ -150,10 +150,12 @@ rule screen_data_qc:
     dge = expand("data/{sample}/dge.txt", sample = config["screen"]),
     perturb_status = expand("data/{sample}/perturb_status.txt", sample = config["screen"]),
     dge_stats = expand("data/{sample}/dge_summary.txt", sample = config["screen"]),
-    valid_dge = expand("data/{sample}/downsampled_dge.txt", sample = config["validation"]),
+    valid_dge = expand("data/{sample}/downsampled/dge_3500_avg_reads_per_cell.txt",
+      sample = config["validation"]),
     target_genes = "meta_data/target_gene_panels/target_genes_validation.csv",
     exp_data = "meta_data/screen_experimental_info.csv",
-    vctr_seqs = expand("meta_data/cropseq_vectors_{chr}_screen.fasta", chr = ["chr8", "chr11"])
+    vctr_seqs = expand("meta_data/cropseq_vectors/cropseq_vectors_{chr}_screen.fasta",
+      chr = ["chr8", "chr11"])
   output:
     "results/analyses/screen_data_qc.html"
   params:
