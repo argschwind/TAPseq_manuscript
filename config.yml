@@ -1,34 +1,44 @@
 ## SAMPLES AND SAMPLE-SPECIFIC PARAMETERS ==========================================================
 
-# sample id: /path/to/fastq/directory
+# sample id: SRA accessor ids to download raw data. multiple runs per sample will be merged
 samples:
-  Sample10X:   /g/steinmetz/incoming/solexa/2018-11-22-H3372BGX9/lane1/LIB38089_RBA37572/fastq
-  11iv210ng:   /g/steinmetz/incoming/solexa/2018-11-22-H3372BGX9/lane1/LIB38090_RBA37573/fastq
-  11iv22ng:    /g/steinmetz/incoming/solexa/2018-11-22-H3372BGX9/lane1/LIB38091_RBA37574/fastq
-  8iv210ng:    /g/steinmetz/incoming/solexa/2018-11-22-H3372BGX9/lane1/LIB38087_RBA37570/fastq
-  8iv22ng:     /g/steinmetz/incoming/solexa/2018-11-22-H3372BGX9/lane1/LIB38088_RBA37571/fastq
-  8iScreen1:   /g/steinmetz/project/singcellTxn/CRISPRdrop/10X_RAW_DATA/k562_screen_Feb2019/8iScreen1
-  11iScreen1:  /g/steinmetz/project/singcellTxn/CRISPRdrop/10X_RAW_DATA/k562_screen_Feb2019/11iScreen1
-  WholeTx:     /g/steinmetz/project/singcellTxn/CRISPRdrop/10X_RAW_DATA/cropseq_vs_tapseq_may2019/WholeTx
-  TAP1:        /g/steinmetz/incoming/solexa/2019-04-17-H5HTFBDXX/lane1/LIB43383_RBA42866/fastq
-  TAP2:        /g/steinmetz/incoming/solexa/2019-04-17-H5HTFBDXX/lane1/LIB43382_RBA42865/fastq
-  W4ea: /g/steinmetz/incoming/solexa/2017-11-07-HW3MVBGX3/lane1/LIB26096_RBA25548/fastq
-  T4ea: /g/steinmetz/incoming/solexa/2017-11-07-HW3MVBGX3/lane1/LIB26093_RBA25545/fastq
-  TAPtotalBM: /g/steinmetz/project/singcellTxn/CRISPRdrop/10X_RAW_DATA/bone_marrow_may2019/TAPtotalBM
-  TAPkitBM: /g/steinmetz/project/singcellTxn/CRISPRdrop/10X_RAW_DATA/bone_marrow_may2019/TAPkitBM
-  WholeTotalBM: /g/steinmetz/project/singcellTxn/CRISPRdrop/10X_RAW_DATA/bone_marrow_may2019/WholeTotalBM
-  WholeKitBM: /g/steinmetz/project/singcellTxn/CRISPRdrop/10X_RAW_DATA/bone_marrow_may2019/WholeKitBM
-  wtxmmix: /g/steinmetz/incoming/solexa/2019-12-11-HNW3JBGXC/lane1/LIB49660_RBA49151/fastq
-  wtxlung: /g/steinmetz/incoming/solexa/2019-12-11-HNW3JBGXC/lane1/LIB49661_RBA49152/fastq
-  tapmix:  /g/steinmetz/incoming/solexa/2019-12-17-HYG5TBGXC/lane1/LIB49694_RBA49185/fastq
-  taplung: /g/steinmetz/incoming/solexa/2019-12-17-HYG5TBGXC/lane1/LIB49692_RBA49183/fastq
-  taphumanmix: /g/steinmetz/incoming/solexa/2019-12-17-HYG5TBGXC/lane1/LIB49693_RBA49184/fastq
-  perturbchr8v2:   /g/steinmetz/incoming/solexa/2019-12-19-HYLKVBGXC/lane1/LIB49738_RBA49229/fastq
-  perturbchr8alt1: /g/steinmetz/incoming/solexa/2019-12-19-HYLKVBGXC/lane1/LIB49742_RBA49233/fastq
-  perturbchr8alt2: /g/steinmetz/incoming/solexa/2019-12-19-HYLKVBGXC/lane1/LIB49740_RBA49231/fastq
-  perturbL1000:  /g/steinmetz/incoming/solexa/2019-12-19-HY5JNBGXC/lane1/LIB49746_RBA49237/fastq
-  tapk562deep: /g/steinmetz/incoming/solexa/2020-01-08-H2NJWBGXF/lane1/LIB49748_RBA49239/fastq
-  wtxk562deep: /g/steinmetz/incoming/solexa/2020-01-08-H2NJWBGXF/lane1/LIB49749_RBA49240/fastq
+  Sample10X: SRR9916607
+  11iv210ng: SRR9916600
+  11iv22ng: SRR9916599
+  8iv210ng: SRR9916602
+  8iv22ng: SRR9916601
+  8iScreen1: [SRR9916627, SRR9916628, SRR9916629, SRR9916630, SRR9916631, SRR9916632, SRR9916633,
+    SRR9916634, SRR9916635, SRR9916638, SRR9916637, SRR9916636, SRR9916639, SRR9916640, SRR9916641,
+    SRR9916642, SRR9916644, SRR9916643, SRR9916647, SRR9916646, SRR9916645, SRR9916650, SRR9916649,
+    SRR9916648, SRR9916651, SRR9916652, SRR9916653, SRR9916654, SRR9916655, SRR9916656, SRR9916657,
+    SRR9916658, SRR9916659, SRR9916660, SRR9916661, SRR9916662, SRR9916665, SRR9916664, SRR9916663,
+    SRR9916666, SRR9916667, SRR9916668]
+  11iScreen1:  [SRR9916669, SRR9916670, SRR9916671, SRR9916672, SRR9916673, SRR9916674, SRR9916675,
+    SRR9916676, SRR9916677, SRR9916678, SRR9916679, SRR9916680, SRR9916681, SRR9916682, SRR9916683,
+    SRR9916686, SRR9916685, SRR9916684, SRR9916687, SRR9916688, SRR9916689, SRR9916690, SRR9916691,
+    SRR9916692, SRR9916693, SRR9916694, SRR9916695, SRR9916696, SRR9916697, SRR9916698, SRR9916701,
+    SRR9916700, SRR9916699, SRR9916702, SRR9916703, SRR9916704, SRR9916705, SRR9916706, SRR9916707]
+  WholeTx: [SRR9916615, SRR9916616, SRR9916617, SRR9916618, SRR9916619, SRR9916620, SRR9916621,
+    SRR9916622, SRR9916623, SRR9916624, SRR9916626, SRR9916625]
+  TAP1: SRR9916613
+  TAP2: SRR9916614
+  W4ea: SRR9916608
+  T4ea: SRR9916605
+  TAPtotalBM: [SRR9916609, SRR9916610]
+  TAPkitBM: [SRR9916611, SRR9916612]
+  WholeTotalBM: [SRR8181408, SRR8181409, SRR8181410, SRR8181411]
+  WholeKitBM: [SRR8181412, SRR8181413, SRR8181414, SRR8181415]
+  wtxmmix: SRR10885108
+  wtxlung: SRR10885109
+  tapmix: SRR10885104
+  taplung: SRR10885105
+  taphumanmix: SRR10885103
+  perturbchr8v2: SRR10885110
+  perturbchr8alt1: SRR10885111
+  perturbchr8alt2: SRR10951636
+  perturbL1000: SRR10885106
+  tapk562deep: SRR10885102
+  wtxk562deep: SRR10885107
 
 # sample lists for rules handling specific groups of samples
 validation:   [11iv210ng, 11iv22ng, 8iv210ng, 8iv22ng, Sample10X]

@@ -1,0 +1,9 @@
+name: fastq_download
+channels:
+  - defaults
+  - bioconda
+  - conda-forge
+dependencies:
+  - python=3.6.6
+  - trimmomatic=0.39
+  

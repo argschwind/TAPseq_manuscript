@@ -15,9 +15,11 @@ git clone https://github.com/argschwind/tapseq_manuscript.git
 ```
 
 ## Download data
-**This is currently not implemented, as GEO links are not active yet!**
-Download of raw data from GEO is handled by the pipeline and necessary fastq files are downloaded
-automatically when executing the workflow. All fastq files are saved under raw_data.
+Download of raw data from the SRA archive is handled by the workflow itself and necessary fastq
+files are generated automatically when executing the workflow. All fastq files are saved in the
+raw_data directory. Downloading sequencing reads from SRA requires that a recent version of the
+[SRA toolkit](https://ncbi.github.io/sra-tools/install_config.html) is installed and added to the
+PATH.
 
 ## Data processing
 All data processing and analyses steps can be executed through snakemake and conda. This only

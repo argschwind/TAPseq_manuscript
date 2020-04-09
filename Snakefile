@@ -4,6 +4,7 @@
 configfile: "config.yml"
 
 # import workflows
+include: "rules/download_fastq.smk"
 include: "rules/create_alignment_refs.smk"
 include: "rules/align_reads.smk"
 include: "rules/extract_dge.smk"
