@@ -11,7 +11,7 @@ relevant parts of the snakemake pipeline, or they can be downloaded as described
 
 The workflow can be downloaded by simply cloning the repository into a location of choice:
 ```
-git clone https://github.com/argschwind/tapseq_manuscript.git
+git clone https://github.com/argschwind/TAPseq_manuscript.git
 ```
 
 ## Download data
