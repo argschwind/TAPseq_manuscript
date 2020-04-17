@@ -4,6 +4,7 @@
 .Ruserdata
 .snakemake
 data/
+raw_data/
 results/
 cluster.yml
 snakehandler.sh

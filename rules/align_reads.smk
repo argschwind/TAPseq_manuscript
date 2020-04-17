@@ -2,23 +2,13 @@
 
 ### input, output and shell paths are all relative to the project directory ###
 
-# python function(s) to infer more complex input files ---------------------------------------------
-
-import glob
-
-# infer input fastq files from dirs in config file and sample wildcard
-def get_fastq_files(wildcards):
-  indir = config["samples"][wildcards.sample]
-  f1 = glob.glob(indir + "/*" + wildcards.sample  + "_1_sequence.txt.gz")
-  f2 = glob.glob(indir + "/*" + wildcards.sample  + "_2_sequence.txt.gz")
-  return {"fastq1" : f1, "fastq2" : f2}
-
 # workflow rules -----------------------------------------------------------------------------------
 
 # convert fastq input files into one unmapped bam file
 rule fastq_to_bam:
   input:
-    unpack(get_fastq_files)
+    fastq1 = "raw_data/{sample}/{sample}_1_sequence.txt.gz",
+    fastq2 = "raw_data/{sample}/{sample}_2_sequence.txt.gz"
   output:
     temp("data/{sample}/unmapped.bam")
   log: "data/{sample}/logs/fastq_to_bam.log"

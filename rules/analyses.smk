@@ -4,12 +4,6 @@
 
 # python function(s) to infer more complex input files
 
-# fastq read 2 (genome read)
-def fastq_read2(sample):
-  fastq_dir = config["samples"][sample]
-  f2 = glob.glob(fastq_dir + "/*" + sample  + "_2_sequence.txt.gz")
-  return f2
-  
 # create whitelist argument for extract_dge.py. required because whitelist can be an empty list,
 # which needs to be translated to an empty ('') string argument
 def get_whitelist_arg(whitelist):
@@ -78,7 +72,7 @@ rule advanced_downsample:
 rule reads_on_target:
   input:
     bam = ["data/" + sample + "/gene_tagged_aligned.bam" for sample in config["validation"]],
-    fastq = [fastq_read2(sample) for sample in config["validation"]],
+    fastq = expand("raw_data/{sample}/{sample}_2_sequence.txt.gz", sample = config["validation"]),
     target_genes = "meta_data/target_gene_panels/target_genes_validation.csv"
   output:
     "data/reads_on_target_validation_samples.csv"
