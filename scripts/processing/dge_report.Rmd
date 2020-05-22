@@ -1,5 +1,5 @@
 ---
-title: "CROP-seq DGE report"
+title: "TAP-seq DGE report"
 date: "`r format(Sys.time(), '%B %d, %Y')`"
 params:
   rmd: "dge_report.Rmd"

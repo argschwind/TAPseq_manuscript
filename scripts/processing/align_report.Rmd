@@ -1,5 +1,5 @@
 ---
-title: "CROP-seq alignment report"
+title: "TAP-seq alignment report"
 date: "`r format(Sys.time(), '%B %d, %Y')`"
 params:
   rmd: "align_report.Rmd"
