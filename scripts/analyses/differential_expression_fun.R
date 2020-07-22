@@ -44,16 +44,12 @@ normalize_cens_mean <- function(dge, percentile = 0.9, norm_counts = FALSE, scal
 #' @param object A SingleCellExperiment object containing gene expression data and perturbation
 #'   data as internal colData Any regular colData will be used as covariates if possible. Can be
 #'   created by \code{create_tapseq_sce}.
-#' @param perturb_status A data.frame containing binary perturbation information for each cell. Rows
-#'   are perturbations (gRNAs or perturbed regulatory elements) and columns are cells, except for
-#'   the first column, which has to contain the perturbation id.
-#' @param gene_expr Matrix or data.frame containing digital gene expression data for all cells and
-#'   genes to be tested. Rows are genes and columns are cells, with row names being gene ids and
-#'   column names cell ids.
-#' @param method Function to perform differential gene expression between perturbed and control
-#'   cells.
+#' @param min_cells Minimum number of cells required per perturbation to be included in differential
+#'   expression tests.
 #' @param parallel Triggers parallel computing using the \code{BiocParallel} package. This requires
 #'   that a back-end was registered prior to executing the function.
+#' @param method Function to perform differential gene expression between perturbed and control
+#'   cells.
 #' @param p_adj_method Method to use for multiple testing correction. For more details see
 #'   \code{\link[stats]{p.adjust}}.
 test_differential_expression <- function(object, min_cells = 25, parallel = FALSE,
@@ -115,8 +111,8 @@ test_differential_expression <- function(object, min_cells = 25, parallel = FALS
 #' Any other columns in colData will ne ignored, because DEsingle currently does not support
 #' covariates.
 #'
-#' @param pert_object SingleCellExperiment object containing gene expression data and cell groupings in
-#'   colData. The perturbation to be tested is assumed to be the first column in colData!
+#' @param pert_object SingleCellExperiment object containing gene expression data and cell groupings
+#'   in colData. The perturbation to be tested is assumed to be the first column in colData!
 de_DEsingle <- function(pert_object) {
   
   # normalize data using censored mean normalization
@@ -143,8 +139,8 @@ de_DEsingle <- function(pert_object) {
 #' The first column in colData is expected to provide the perturbation status as a factor with two
 #' levels, where the first level is non-perturbed cells. If this is not the case, the function will
 #' attempt to convert the first column to a two level factor, with any risks that entails.
-#' Any other columns in colData will be used as covariates during modelling, but only the
-#' perturbation will be tested for signficance.
+#' Any other columns in colData will be used as covariates during modeling, but only the
+#' perturbation will be tested for significance.
 #'
 #' @param pert_object SingleCellExperiment object containing gene expression data and cell groupings
 #'   in colData. The perturbation to be tested is assumed to be the first column in colData!
