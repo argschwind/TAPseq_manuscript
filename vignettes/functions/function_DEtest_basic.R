@@ -27,7 +27,7 @@ runSeuratTest <- function(g = "DS42_eGATA1_D", DGE, pert, scrcols, scalefun= log
   rowmeans.b <- apply(GetAssayData(b.obj, slot="counts"),1,mean)
   abs.diff <- rowmeans.a - rowmeans.b
   
-  source("/g/steinmetz/project/singcellTxn/CRISPRdrop/LV/001b_DEcomparison_bigDataSet/MAST.R", local = T)
+  source("functions/MAST.R", local = TRUE)
   
   sce <- SingleCellExperiment(list(counts =GetAssayData(testobject, slot = "counts")  ) , colData = data.frame(row.names = colnames(testobject), ident = Idents(testobject), cov = testobject$covariate))
   MAST.result <- de_MAST(sce)

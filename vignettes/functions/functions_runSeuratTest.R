@@ -38,7 +38,7 @@ runSeuratTest <- function(g = "DS42_eGATA1_D", test = "wilcox", DGE, pert, scrco
       m <- na.omit(data.frame(row.names = rownames(scdd.result), p_val = scdd.result$combined.pvalue, p_val_adj = scdd.result$combined.pvalue.adj, avg_logFC = m1[rownames(scdd.result),"avg_logFC"]))
       
     } else if (test == "MAST.cov") {
-      source("/g/steinmetz/project/singcellTxn/CRISPRdrop/LV/001b_DEcomparison_bigDataSet/MAST.R", local = T)
+      source("functions/MAST.R", local = TRUE)
       if (is.null(covariate)){
       featurevar <- apply(GetAssayData(testobject),1,var)
       VariableFeatures(testobject) <- names(featurevar)[featurevar >0 ]
